@@ -68,7 +68,6 @@ Notes:
                         "Content-Type": "application/json",
                     },
                 })
-                console.log("agent file response:", response)
 
                 if (!response.ok) {
                     const errorMsg = `Error ${response.status}: ${response.statusText}`

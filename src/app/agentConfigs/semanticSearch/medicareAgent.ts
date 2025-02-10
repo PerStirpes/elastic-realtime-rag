@@ -76,7 +76,6 @@ const medicareAgent: AgentConfig = {
                         "Content-Type": "application/json",
                     },
                 })
-                console.log("agent file response:", response)
                 if (!response.ok) {
                     console.error("Error from server:", response)
                     return { error: "Server error while searching Medicare data." }

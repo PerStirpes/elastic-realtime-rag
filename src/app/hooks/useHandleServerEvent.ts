@@ -55,11 +55,9 @@ export function useHandleServerEvent({
     const handleFunctionCall = async (functionCallParams: { name: string; call_id?: string; arguments: string }) => {
         let args: any
         // 1. Attempt to parse the JSON arguments
-        console.log("Raw JSON:", functionCallParams.arguments)
         try {
             args = JSON.parse(functionCallParams.arguments)
             addTranscriptBreadcrumb(`function call: ${functionCallParams.name}`, args)
-            console.log("Parsed JSON:", args)
         } catch (parseError) {
             // console.error("Error parsing JSON in functionCallParams.arguments:", parseError)
             console.error("JSON Parse Error:", parseError, "Raw JSON:", functionCallParams.arguments)

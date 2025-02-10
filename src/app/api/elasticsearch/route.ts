@@ -45,8 +45,6 @@ export async function GET(request: NextRequest) {
             },
         })
 
-        console.log("searchResult", JSON.stringify(searchResult.hits.hits[0].fields, null, 2))
-
         const fields = searchResult.hits.hits[0].fields
         if (!fields) {
             return NextResponse.json(

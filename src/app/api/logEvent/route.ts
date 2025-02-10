@@ -17,8 +17,6 @@ export async function POST(request: Request) {
     try {
         // Parse the JSON payload from the request.
         const eventData = await request.json()
-        // console.log('eventData', eventData)
-        // Optionally, attach additional metadata.
         eventData["@timestamp"] = new Date().toISOString()
 
         // Create an index name using the current date.

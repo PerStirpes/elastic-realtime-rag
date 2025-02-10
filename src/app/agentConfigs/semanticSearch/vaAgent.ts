@@ -101,7 +101,6 @@ const vaAgent: AgentConfig = {
                     "Content-Type": "application/json",
                 },
             })
-            console.log("agent file response:", response)
             if (!response.ok) {
                 console.error("Server returned an error:", response)
                 return { error: "Something went wrong." }
