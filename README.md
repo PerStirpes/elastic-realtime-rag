@@ -23,7 +23,7 @@ You should be able to use this repo to prototype your own multi-agent realtime v
 
 ### Defining your own agents
 
-- To see how to define tools and toolLogic, including a background LLM call, see [src/app/agentConfigs/semanticSearch/elasticBlogs.ts](src/app/agentConfigs/semanticSearch/elasticBlogs.ts)
+- To see how to define tools and toolLogic, including a background LLM call, see [src/app/agentConfigs/semanticSearch/elasticBlogsAgent.ts](src/app/agentConfigs/semanticSearch/elasticBlogsAgent.ts)
 
 ## UI
 
