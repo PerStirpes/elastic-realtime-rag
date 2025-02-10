@@ -1,19 +1,11 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from "next"
 
 const nextConfig: NextConfig = {
     experimental: {
         reactCompiler: {
-          compilationMode: 'annotation',
+            compilationMode: "annotation",
         },
-      }
-    //   ,
-    // webpack: (config, { isServer }) => {
-    //     if (isServer) {
-    //       config.externals.push("@elastic/opentelemetry-node")
-    //     } 
-    //     return config
-    //   }
-};
+    },
+}
 
-export default nextConfig;
-
+export default nextConfig
