@@ -14,29 +14,49 @@ export async function GET(request: NextRequest) {
                 { status: 400 },
             )
         }
+
         const esQuery = {
             retriever: {
-                standard: {
-                    query: {
-                        nested: {
-                            path: "semantic_text.inference.chunks",
-                            query: {
-                                sparse_vector: {
-                                    inference_id: "obs_ai_assistant_kb_inference",
-                                    field: "semantic_text.inference.chunks.embeddings",
-                                    query: query,
+                rrf: {
+                    retrievers: [
+                        {
+                            standard: {
+                                query: {
+                                    multi_match: {
+                                        query: query,
+                                        fields: ["title", "body_content"],
+                                    },
                                 },
                             },
-                            inner_hits: {
-                                size: 2,
-                                name: "search-va.semantic_text",
-                                _source: ["semantic_text.inference.chunks.text"],
+                        },
+                        {
+                            standard: {
+                                query: {
+                                    nested: {
+                                        path: "semantic_text.inference.chunks",
+                                        query: {
+                                            sparse_vector: {
+                                                inference_id: "obs_ai_assistant_kb_inference",
+                                                field: "semantic_text.inference.chunks.embeddings",
+                                                query: query,
+                                            },
+                                        },
+                                        inner_hits: {
+                                            size: 2,
+                                            name: "search-va.semantic_text",
+                                            _source: ["semantic_text.inference.chunks.text"],
+                                        },
+                                    },
+                                },
                             },
                         },
-                    },
+                    ],
+                    rank_window_size: 5,
+                    rank_constant: 1,
                 },
             },
-            size: 2,
+            size: 3,
+            fields: ["title", "body_content", "additional_urls"],
         }
 
         const searchResult = await esClient.search<SearchResult>({
