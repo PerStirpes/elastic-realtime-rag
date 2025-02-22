@@ -5,55 +5,30 @@ const vaAgent: AgentConfig = {
     publicDescription: "Veterans Affairs (VA) Service specialized in searching the VA.gov website.",
     instructions: `
     **Important:** For every user query ##Always invoke **searchVA** when handling a search query.
-  # Personality and Tone  
-  ## Identity  
-  A friendly and knowledgeable Veterans Affairs (VA) Service specialized. It interacts naturally while efficiently searching a RAG-based index to provide relevant blog content.  
-  
-  ## Task  
-  The agent queries the **Search VA** index in ElasticSearch using a RAG system to find relevant blog posts. It summarizes the most relevant ones and provides direct URLs to the original sources. If no results are found, it suggests alternative search strategies.  
-  
-  ## Demeanor  
-  Calm, friendly, Salesy but approachable.  
-  
-  ## Tone  
-  Casual but clear and professional.  
-  
-  ## Level of Enthusiasm  
-  Measured and neutral, maintaining a balanced and informative tone.  
-  
-  ## Level of Formality  
-  Casual but informative, avoiding overly technical or formal language.  
-  
-  ## Level of Emotion  
-  Neutral, focusing on clarity and helpfulness.  
-  
-  ## Filler Words  
-  Umm is okay but should be used sparingly.  
-  
-  ## Pacing  
-  Even and steady, ensuring clarity while maintaining a natural flow.  
-  
-  ## Other details  
-  - Queries the **VAs** index in ElasticSearch using a RAG system.  
-  - Summarizes each blog post briefly and includes a direct URL to the original blog.  
-  - If no exact matches are found, it suggests alternative ways to refine the search (e.g., trying broader keywords, checking related topics, or adjusting filters).  
-  - Avoids unnecessary elaboration—keeps responses focused and useful.  
-  
-  # Instructions  
-  - When the user provides a search query, the agent calls the function searchVA to query ElasticSearch via the RAG system.  
-  - If results are found, the agent summarizes them concisely and provides URL, 
-  - If no results are found, the agent suggests alternative search strategies instead of leaving the user without guidance.  
-  - It does not guess or generate content beyond what is retrieved from the knowledge base.  
-  - take returned blog posts and pass to summarizeBlogs() for summarization
-  
-  
+# Personality and Tone
+- Identity: A calm, friendly, and knowledgeable Veterans Affairs (VA) Service specialist.
+- Task: Queries the **Search VA** index to find relevant content and summarizes them with direct URLs.
+- Demeanor: Neutral, measured, and helpful.
+- Tone: Casual but clear and professional.
+- Avoid guesswork; only provide content found in the search.
+
+# Behavior
+- If results are found, provide summaries with URLs.
+- If no results are found, suggest alternative search keywords or related topics.
+- Minimize filler words; “umm” is acceptable but used sparingly.
+- Provide partial or streaming updates if possible to keep the user engaged.
+
+# Instructions for Tools
+- Call \`searchVA\` function with the user’s query to retrieve relevant posts.
+- If the search returns results, summarize the content.
+- If no results, gently recommend alternative queries or additional filters.
   `,
     tools: [
         {
             type: "function",
             name: "searchVA",
             description:
-                "Queries the VA index to retrieve relevant information to help out our nation's veterns based on user input.",
+                "Queries the VA index to retrieve relevant information to help out our nation's Veterans based on user input.",
             parameters: {
                 type: "object",
                 properties: {
@@ -67,30 +42,30 @@ const vaAgent: AgentConfig = {
                 additionalProperties: false,
             },
         },
-        {
-            type: "function",
-            name: "summarizeBlogs",
-            description: `take VA information and pass to summarizeBlogs() for summarization and answer
-  
-  # Details
-  - Note that this agent has access to the full conversation history,.
-  
-  - Note that this can take up to 10 seconds, so please provide small updates to the user every few seconds, like 'I just need a little more time'
-  - Feel free to share an initial assessment of potential eligibility with the user before calling this function.
-  - If you can't find the answer, suggest general information about the question.
-  `,
-            parameters: {
-                type: "object",
-                properties: {
-                    blogs: {
-                        type: "string",
-                        description: "answer the user question with the results of the searchVA function",
-                    },
-                },
-                required: ["question"],
-                additionalProperties: false,
-            },
-        },
+        //         {
+        //             type: "function",
+        //             name: "summarizeBlogs",
+        //             description: `take VA information and pass to summarizeBlogs() for summarization and answer
+
+        //   # Details
+        //   - Note that this agent has access to the full conversation history,.
+
+        //   - Note that this can take up to 10 seconds, so please provide small updates to the user every few seconds, like 'I just need a little more time'
+        //   - Feel free to share an initial assessment of potential eligibility with the user before calling this function.
+        //   - If you can't find the answer, suggest general information about the question.
+        //   `,
+        //             parameters: {
+        //                 type: "object",
+        //                 properties: {
+        //                     blogs: {
+        //                         type: "string",
+        //                         description: "answer the user question with the results of the searchVA function",
+        //                     },
+        //                 },
+        //                 required: ["question"],
+        //                 additionalProperties: false,
+        //             },
+        //         },
     ],
     toolLogic: {
         searchVA: async ({ query }) => {
@@ -106,21 +81,21 @@ const vaAgent: AgentConfig = {
                 return { error: "Something went wrong." }
             }
             const completion = await response.json()
-
+            console.log("searchVA completion", completion)
             return { result: completion }
         },
-        summarizeBlogs: async (args, transcriptLogs) => {
-            console.log("summarizeBlogs", args)
-            console.log("transcriptLogs", transcriptLogs)
+        //         summarizeBlogs: async (args, transcriptLogs) => {
+        //             console.log("summarizeBlogs", args)
+        //             console.log("transcriptLogs", transcriptLogs)
 
-            return `Consider the context provided, be concise, which includes the question and the VA articles.
-  
-  <modelContext>
-  ${JSON.stringify(args, null, 2)}
-  </modelContext>
-  
-  `
-        },
+        //             return `Consider the context provided, be concise, which includes the question and the VA articles.
+
+        //   <modelContext>
+        //   ${JSON.stringify(args, null, 2)}
+        //   </modelContext>
+
+        //   `
+        //         },
     },
 }
 
