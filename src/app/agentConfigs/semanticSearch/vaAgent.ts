@@ -68,7 +68,7 @@ const vaAgent: AgentConfig = {
         //         },
     ],
     toolLogic: {
-        searchVA: async ({ query }) => {
+        searchVA: async ({ query }: { query: string }) => {
             console.log(`[toolLogic] Searching VA for: ${query}`)
             const response = await fetch(`/api/va?q=${encodeURIComponent(query)}}`, {
                 method: "GET",
@@ -83,6 +83,40 @@ const vaAgent: AgentConfig = {
             const completion = await response.json()
             console.log("searchVA completion", completion)
             return { result: completion }
+        },
+        sendEmail: async (email, transcriptLogs) => {
+            try {
+                function extractTitleAndRole(transcriptLogs) {
+                    return transcriptLogs
+                        .filter(
+                            ({ role, title }) =>
+                                (role === "user" || role === "assistant") &&
+                                !/^hi\b|^hello\b/i.test(title) &&
+                                !/\[inaudible\]/i.test(title),
+                        )
+                        .map(({ title, role }) => ({ title, role }))
+                }
+                const filteredTitles = extractTitleAndRole(transcriptLogs)
+                console.log("filteredTitles", filteredTitles)
+                const response = await fetch(`/api/sendEmail`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ email: email, message: filteredTitles }),
+                })
+
+                if (!response.ok) {
+                    console.error("Error from server:", response)
+                    return { error: "Server error while sending email." }
+                }
+                const result = await response.json()
+                console.log("result", result)
+                return { result }
+            } catch (error) {
+                console.error("[MedicareExpert] sendEmail encountered an error:", error)
+                return { error: "An unexpected error occurred while sending the email." }
+            }
         },
         //         summarizeBlogs: async (args, transcriptLogs) => {
         //             console.log("summarizeBlogs", args)

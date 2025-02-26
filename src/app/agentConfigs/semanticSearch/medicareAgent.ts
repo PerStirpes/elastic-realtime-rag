@@ -50,10 +50,9 @@ const medicareAgent: AgentConfig = {
     Summarizes the blog posts returned by the searchVA function.
         - Provide summaries
         - Note that this can take up to 10 seconds, so please provide small updates to the user every few seconds, like 'I just need a little more time'
-         - Feel free to share an initial assessment of potential eligibility with the user before calling this function.
+        - Feel free to share an initial assessment of potential eligibility with the user before calling this function.
         - Include direct URLs
-        - If no results, advise alternative search strategies
-  `,
+        - If no results, advise alternative search strategies `,
             parameters: {
                 type: "object",
                 properties: {

@@ -16,7 +16,6 @@ export async function GET(request: NextRequest) {
     try {
         const searchParams = await request.nextUrl.searchParams
         const query = searchParams.get("q")
-        console.log("Query param is:", query)
 
         if (!query) {
             return NextResponse.json(
