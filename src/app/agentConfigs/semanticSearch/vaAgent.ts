@@ -86,17 +86,22 @@ const vaAgent: AgentConfig = {
         },
         sendEmail: async (email, transcriptLogs) => {
             try {
-                function extractTitleAndRole(transcriptLogs) {
+                function extractTitleAndRole(
+                    transcriptLogs: { role: string | undefined; title: string }[],
+                ): { title: string; role: string }[] {
                     return transcriptLogs
                         .filter(
                             ({ role, title }) =>
+                                role &&
                                 (role === "user" || role === "assistant") &&
                                 !/^hi\b|^hello\b/i.test(title) &&
                                 !/\[inaudible\]/i.test(title),
                         )
-                        .map(({ title, role }) => ({ title, role }))
+                        .map(({ title, role }) => ({ title, role: role as string }))
                 }
-                const filteredTitles = extractTitleAndRole(transcriptLogs)
+                const filteredTitles = extractTitleAndRole(
+                    transcriptLogs.filter((log) => log.role !== undefined) as { role: string; title: string }[],
+                )
                 console.log("filteredTitles", filteredTitles)
                 const response = await fetch(`/api/sendEmail`, {
                     method: "POST",

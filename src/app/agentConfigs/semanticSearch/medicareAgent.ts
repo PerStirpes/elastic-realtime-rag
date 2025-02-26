@@ -50,7 +50,7 @@ const medicareAgent: AgentConfig = {
     Summarizes the blog posts returned by the searchVA function.
         - Provide summaries
         - Note that this can take up to 10 seconds, so please provide small updates to the user every few seconds, like 'I just need a little more time'
-        - Feel free to share an initial assessment of potential eligibility with the user before calling this function.
+         - Feel free to share an initial assessment of potential eligibility with the user before calling this function.
         - Include direct URLs
         - If no results, advise alternative search strategies `,
             parameters: {
@@ -128,17 +128,22 @@ const medicareAgent: AgentConfig = {
         },
         sendEmail: async (email, transcriptLogs) => {
             try {
-                function extractTitleAndRole(transcriptLogs) {
+                function extractTitleAndRole(
+                    transcriptLogs: { role: string | undefined; title: string }[],
+                ): { title: string; role: string }[] {
                     return transcriptLogs
                         .filter(
                             ({ role, title }) =>
+                                role &&
                                 (role === "user" || role === "assistant") &&
                                 !/^hi\b|^hello\b/i.test(title) &&
                                 !/\[inaudible\]/i.test(title),
                         )
-                        .map(({ title, role }) => ({ title, role }))
+                        .map(({ title, role }) => ({ title, role: role as string }))
                 }
-                const filteredTitles = extractTitleAndRole(transcriptLogs)
+                const filteredTitles = extractTitleAndRole(
+                    transcriptLogs.filter((log) => log.role !== undefined) as { role: string; title: string }[],
+                )
                 console.log("filteredTitles", filteredTitles)
                 const response = await fetch(`/api/sendEmail`, {
                     method: "POST",
