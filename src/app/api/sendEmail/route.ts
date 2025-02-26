@@ -5,7 +5,7 @@ export async function POST(request: Request) {
         // Parse the JSON payload from the request.
         const eventData = await request.json()
 
-        const response = fetch(process.env.ZAP_URL, {
+        const response = fetch("https://hooks.zapier.com/hooks/catch/21174512/2g29d9k/", {
             method: "POST",
             body: JSON.stringify(eventData),
             headers: {
