@@ -4,76 +4,12 @@ import { useEffect } from "react"
 
 export function FullStoryScript() {
     useEffect(() => {
-        /* eslint-disable @typescript-eslint/no-unused-expressions */
-        // @ts-nocheck
         window._fs_host = window._fs_host || "fullstory.com"
         const _fs_script = "edge.fullstory.com/s/fs.js"
         window._fs_script = _fs_script
         window._fs_org = process.env.NEXT_PUBLIC_FS_ORG_ID || "o-2121BN-na1"
         window._fs_namespace = "FS"
-        ;((m, n, e, t, l, o, g, y) => {
-            if (e in m) {
-                if (m.console && m.console.log) {
-                    m.console.log('FullStory namespace conflict. Please set window["_fs_namespace"].')
-                }
-                return
-            }
-            g = m[e] = (a, b, s) => {
-                g.q ? g.q.push([a, b, s]) : g._api(a, b, s)
-            }
-            g.q = []
-            o = n.createElement(t)
-            o.async = 1
-            o.crossOrigin = "anonymous"
-            o.src = "https://" + _fs_script
-            y = n.getElementsByTagName(t)[0]
-            y.parentNode.insertBefore(o, y)
-            g.identify = (i, v, s) => {
-                g(l, { uid: i }, s)
-                if (v) g(l, v, s)
-            }
-            g.setUserVars = (v, s) => {
-                g(l, v, s)
-            }
-            g.event = (i, v, s) => {
-                g("event", { n: i, p: v }, s)
-            }
-            g.anonymize = () => {
-                g.identify(!!0)
-            }
-            g.shutdown = () => {
-                g("rec", !1)
-            }
-            g.restart = () => {
-                g("rec", !0)
-            }
-            g.log = (a, b) => {
-                g("log", [a, b])
-            }
-            g.consent = (a) => {
-                g("consent", !arguments.length || a)
-            }
-            g.identifyAccount = (i, v) => {
-                o = "account"
-                v = v || {}
-                v.acctId = i
-                g(o, v)
-            }
-            g.clearUserCookie = () => {}
-            g.setVars = (n, p) => {
-                g("setVars", [n, p])
-            }
-            g._w = {}
-            y = "XMLHttpRequest"
-            g._w[y] = m[y]
-            y = "fetch"
-            g._w[y] = m[y]
-            if (m[y])
-                m[y] = function () {
-                    return g._w[y].apply(this, arguments)
-                }
-            g._v = "2.0.0"
-        })(window, document, window._fs_namespace, "script", "user")
+        require("./raw-snippet")
     }, [])
 
     return null
