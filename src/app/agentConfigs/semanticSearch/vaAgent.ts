@@ -17,11 +17,13 @@ const vaAgent: AgentConfig = {
 - If no results are found, suggest alternative search keywords or related topics.
 - Minimize filler words; “umm” is acceptable but used sparingly.
 - Provide partial or streaming updates if possible to keep the user engaged.
+- If the user requests for an email, **Important:** Ask the user for their email and then call the **sendEmail** function.
 
 # Instructions for Tools
 - Call \`searchVA\` function with the user’s query to retrieve relevant posts.
 - If the search returns results, summarize the content.
 - If no results, gently recommend alternative queries or additional filters.
+- If the user is satisfied with the results, ask the user for their email and then call \`sendEmail\` to send the results to the user. 
   `,
     tools: [
         {
@@ -42,30 +44,27 @@ const vaAgent: AgentConfig = {
                 additionalProperties: false,
             },
         },
-        //         {
-        //             type: "function",
-        //             name: "summarizeBlogs",
-        //             description: `take VA information and pass to summarizeBlogs() for summarization and answer
-
-        //   # Details
-        //   - Note that this agent has access to the full conversation history,.
-
-        //   - Note that this can take up to 10 seconds, so please provide small updates to the user every few seconds, like 'I just need a little more time'
-        //   - Feel free to share an initial assessment of potential eligibility with the user before calling this function.
-        //   - If you can't find the answer, suggest general information about the question.
-        //   `,
-        //             parameters: {
-        //                 type: "object",
-        //                 properties: {
-        //                     blogs: {
-        //                         type: "string",
-        //                         description: "answer the user question with the results of the searchVA function",
-        //                     },
-        //                 },
-        //                 required: ["question"],
-        //                 additionalProperties: false,
-        //             },
-        //         },
+        {
+            type: "function",
+            name: "sendEmail",
+            description:
+                "**Important:** Ask the user for their email. Constructs the raw email, and dispatches it through a backend endpoint to send the email.",
+            parameters: {
+                type: "object",
+                properties: {
+                    email: {
+                        type: "string",
+                        description: "The recipient's email address.",
+                    },
+                    transcriptLogs: {
+                        type: "string",
+                        description: "the most recent transcriptLogs",
+                    },
+                },
+                required: ["email", "transcriptLogs"],
+                additionalProperties: false,
+            },
+        },
     ],
     toolLogic: {
         searchVA: async ({ query }: { query: string }) => {
@@ -123,18 +122,6 @@ const vaAgent: AgentConfig = {
                 return { error: "An unexpected error occurred while sending the email." }
             }
         },
-        //         summarizeBlogs: async (args, transcriptLogs) => {
-        //             console.log("summarizeBlogs", args)
-        //             console.log("transcriptLogs", transcriptLogs)
-
-        //             return `Consider the context provided, be concise, which includes the question and the VA articles.
-
-        //   <modelContext>
-        //   ${JSON.stringify(args, null, 2)}
-        //   </modelContext>
-
-        //   `
-        //         },
     },
 }
 
