@@ -5,7 +5,6 @@ interface SearchResult {
         hits: {
             _source?: {
                 body_content?: string
-                // title?: string
                 additional_urls?: string[]
             }
         }[]
@@ -15,7 +14,6 @@ interface SearchResult {
 function extractBodyContentAndUrls(data: SearchResult): {
     body_content: string
     additional_urls: string[]
-    // title: string
 }[] {
     // Regex pattern to remove the unwanted block of text (handles minor variations)
     const regexToRemove =
@@ -24,7 +22,6 @@ function extractBodyContentAndUrls(data: SearchResult): {
     return data.hits.hits.map((hit) => ({
         body_content: (hit._source?.body_content ?? "").replace(regexToRemove, "").trim(),
         additional_urls: hit._source?.additional_urls ?? [],
-        // title: hit._source?.title ?? "",
     }))
 }
 
