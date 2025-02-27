@@ -16,6 +16,8 @@ const eslintConfig = [
             "@typescript-eslint/no-explicit-any": "off",
             "react-hooks/exhaustive-deps": "off",
             "prefer-rest-params": "off",
+            "@typescript-eslint/ban-ts-comment": "off",
+            "@typescript-eslint/no-require-imports": "off",
         },
     },
 ]
