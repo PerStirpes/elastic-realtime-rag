@@ -3,9 +3,14 @@ import { NextResponse } from "next/server"
 export async function POST(request: Request) {
     try {
         // Parse the JSON payload from the request.
+        const WebhookURL = process.env.ZAP_URL
         const eventData = await request.json()
 
-        const response = fetch("https://hooks.zapier.com/hooks/catch/21174512/2g29d9k/", {
+        if (!WebhookURL) {
+            throw new Error("Webhook URL is not defined")
+        }
+
+        const response = await fetch(WebhookURL, {
             method: "POST",
             body: JSON.stringify(eventData),
             headers: {
