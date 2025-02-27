@@ -5,6 +5,7 @@ import { useEffect } from "react"
 export function FullStoryScript() {
     useEffect(() => {
         /* eslint-disable @typescript-eslint/no-unused-expressions */
+        // @ts-nocheck
         window._fs_host = window._fs_host || "fullstory.com"
         const _fs_script = "edge.fullstory.com/s/fs.js"
         window._fs_script = _fs_script
