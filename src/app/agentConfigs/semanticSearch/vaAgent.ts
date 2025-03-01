@@ -69,7 +69,7 @@ const vaAgent: AgentConfig = {
     toolLogic: {
         searchVA: async ({ query }: { query: string }) => {
             console.log(`[toolLogic] Searching VA for: ${query}`)
-            const response = await fetch(`/api/va?q=${encodeURIComponent(query)}}`, {
+            const response = await fetch(`/api/va?q=${encodeURIComponent(query)}`, {
                 method: "GET",
                 headers: {
                     "Content-Type": "application/json",
@@ -118,7 +118,7 @@ const vaAgent: AgentConfig = {
                 console.log("result", result)
                 return { result }
             } catch (error) {
-                console.error("[MedicareExpert] sendEmail encountered an error:", error)
+                console.error("[VAExpert] sendEmail encountered an error:", error)
                 return { error: "An unexpected error occurred while sending the email." }
             }
         },

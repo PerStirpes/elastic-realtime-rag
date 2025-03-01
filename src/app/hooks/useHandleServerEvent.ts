@@ -14,6 +14,7 @@ export interface UseHandleServerEventParams {
     shouldForceResponse?: boolean
 }
 
+//todo clean up event handlding
 export function useHandleServerEvent({
     setSessionStatus,
     selectedAgentName,
@@ -43,7 +44,7 @@ export function useHandleServerEvent({
             console.log("No truncation needed, message is DONE")
             return
         }
-
+        //todo repair
         // sendClientEvent({
         //     type: "conversation.item.truncate",
         //     item_id: mostRecentAssistantMessage?.itemId,
@@ -84,7 +85,7 @@ export function useHandleServerEvent({
         // 2. Wrap the rest of the processing in a try/catch block
         try {
             const currentAgent = selectedAgentConfigSet?.find((a) => a.name === selectedAgentName)
-
+            //todo
             // addTranscriptBreadcrumb(`function call: ${functionCallParams.name}`, args)
 
             if (currentAgent?.toolLogic?.[functionCallParams.name]) {
@@ -109,10 +110,10 @@ export function useHandleServerEvent({
                 const newAgentConfig = selectedAgentConfigSet?.find((a) => a.name === destinationAgent) || null
 
                 if (newAgentConfig) {
-                    console.log(`Transferring to agent: ${destinationAgent}`);
-                    setSelectedAgentName(destinationAgent);
+                    console.log(`Transferring to agent: ${destinationAgent}`)
+                    setSelectedAgentName(destinationAgent)
                 } else {
-                    console.error(`Failed to transfer - agent not found: ${destinationAgent}`);
+                    console.error(`Failed to transfer - agent not found: ${destinationAgent}`)
                 }
 
                 const functionCallOutput = {

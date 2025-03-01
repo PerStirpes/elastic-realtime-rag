@@ -15,6 +15,7 @@ function extractBodyContentAndUrls(data: SearchResult): {
     body_content: string
     additional_urls: string[]
 }[] {
+    // todo remove, this was moved into elastic, need to reprocess the index
     // Regex pattern to remove the unwanted block of text (handles minor variations)
     const regexToRemove =
         /Skip to Content\s*An official website of the United States government\s*Here’s how you know\s*The \.gov means it’s official\..*?Talk to the Veterans Crisis Line now\s*/gs

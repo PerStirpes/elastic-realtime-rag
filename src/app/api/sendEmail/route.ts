@@ -17,7 +17,9 @@ export async function POST(request: Request) {
                 "Content-Type": "application/json",
             },
         })
+        // todo add proper error handling, remove console.log, and improve response handling
         console.log("this is the response", response)
+
         // if (!response.ok) {
         //     console.error("Error from Zapier webhook:", response)
         //     return NextResponse.json({ error: "Error sending data to Zapier." }, { status: 500 })
