@@ -26,6 +26,7 @@ import Image from "next/image"
 import Transcript from "./components/Transcript"
 import Events from "./components/Events"
 import BottomToolbar from "./components/BottomToolbar"
+import AudioDancerComponent from "./components/AudioDancerComponent"
 
 // Types
 import { AgentConfig, SessionStatus } from "@/app/types"
@@ -54,6 +55,13 @@ function Logic() {
     const pcRef = useRef<RTCPeerConnection | null>(null)
     const dcRef = useRef<RTCDataChannel | null>(null)
     const audioElementRef = useRef<HTMLAudioElement | null>(null)
+    // Reference to store event handlers for cleanup
+    const dcEventHandlersRef = useRef<{
+        open: () => void
+        close: () => void
+        error: (err: any) => void
+        message: (e: MessageEvent) => void
+    } | null>(null)
     const [sessionStatus, setSessionStatus] = useState<SessionStatus>("DISCONNECTED")
 
     const [isEventsPaneExpanded, setIsEventsPaneExpanded] = useState<boolean>(false)
@@ -61,7 +69,8 @@ function Logic() {
     const [isPTTActive, setIsPTTActive] = useState<boolean>(false)
     const [isPTTUserSpeaking, setIsPTTUserSpeaking] = useState<boolean>(false)
     const [isAudioPlaybackEnabled, setIsAudioPlaybackEnabled] = useState<boolean>(true)
-
+    const [localStream, setLocalStream] = useState<MediaStream | null>(null)
+    const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
     const sendClientEvent = (eventObj: any, eventNameSuffix = "") => {
         if (dcRef.current && dcRef.current.readyState === "open") {
             logClientEvent(eventObj, eventNameSuffix)
@@ -98,11 +107,18 @@ function Logic() {
         setSelectedAgentConfigSet(agents)
     }, [searchParams])
 
+    // Store whether the disconnect was manually triggered
+    const manualDisconnectRef = useRef(false)
+
     useEffect(() => {
-        if (selectedAgentName && sessionStatus === "DISCONNECTED") {
+        if (selectedAgentName && sessionStatus === "DISCONNECTED" && !manualDisconnectRef.current) {
             connectToRealtime()
         }
-    }, [selectedAgentName])
+        // Reset the manual disconnect flag when status changes to CONNECTED
+        if (sessionStatus === "CONNECTED") {
+            manualDisconnectRef.current = false
+        }
+    }, [selectedAgentName, sessionStatus])
 
     useEffect(() => {
         if (sessionStatus === "CONNECTED" && selectedAgentConfigSet && selectedAgentName) {
@@ -150,22 +166,55 @@ function Logic() {
             }
             audioElementRef.current.autoplay = isAudioPlaybackEnabled
 
-            const { pc, dc } = await createRealtimeConnection(EPHEMERAL_KEY, audioElementRef)
+            const { pc, dc, localStream } = await createRealtimeConnection(EPHEMERAL_KEY, audioElementRef)
             pcRef.current = pc
             dcRef.current = dc
+            setLocalStream(localStream)
 
-            dc.addEventListener("open", () => {
+            // Attach remote stream to state once available.
+            // (Wait a moment for the ontrack event to fire.)
+            const timeoutId = setTimeout(() => {
+                if (audioElementRef.current && audioElementRef.current.srcObject) {
+                    setRemoteStream(audioElementRef.current.srcObject as MediaStream)
+                }
+            }, 1000)
+
+            // Clear timeout on disconnect
+            pcRef.current.addEventListener("iceconnectionstatechange", () => {
+                if (
+                    pcRef.current?.iceConnectionState === "disconnected" ||
+                    pcRef.current?.iceConnectionState === "failed" ||
+                    pcRef.current?.iceConnectionState === "closed"
+                ) {
+                    clearTimeout(timeoutId)
+                }
+            })
+            // Store event listeners for cleanup
+            const handleOpen = () => {
                 logClientEvent({}, "data_channel.open")
-            })
-            dc.addEventListener("close", () => {
+            }
+            const handleClose = () => {
                 logClientEvent({}, "data_channel.close")
-            })
-            dc.addEventListener("error", (err: any) => {
+            }
+            const handleError = (err: any) => {
                 logClientEvent({ error: err }, "data_channel.error")
-            })
-            dc.addEventListener("message", (e: MessageEvent) => {
+            }
+            const handleMessage = (e: MessageEvent) => {
                 handleServerEventRef.current(JSON.parse(e.data))
-            })
+            }
+
+            dc.addEventListener("open", handleOpen)
+            dc.addEventListener("close", handleClose)
+            dc.addEventListener("error", handleError)
+            dc.addEventListener("message", handleMessage)
+
+            // Store the event handlers in refs for cleanup
+            dcEventHandlersRef.current = {
+                open: handleOpen,
+                close: handleClose,
+                error: handleError,
+                message: handleMessage,
+            }
 
             setDataChannel(dc)
         } catch (err) {
@@ -175,21 +224,46 @@ function Logic() {
     }
 
     const disconnectFromRealtime = () => {
-        if (pcRef.current) {
-            pcRef.current.getSenders().forEach((sender) => {
-                if (sender.track) {
-                    sender.track.stop()
-                }
-            })
+        try {
+            // Clean up event listeners from data channel
+            if (dcRef.current && dcEventHandlersRef.current) {
+                const handlers = dcEventHandlersRef.current
+                dcRef.current.removeEventListener("open", handlers.open)
+                dcRef.current.removeEventListener("close", handlers.close)
+                dcRef.current.removeEventListener("error", handlers.error)
+                dcRef.current.removeEventListener("message", handlers.message)
+                dcEventHandlersRef.current = null
+            }
 
-            pcRef.current.close()
-            pcRef.current = null
+            // Stop and clean up RTCPeerConnection
+            if (pcRef.current) {
+                pcRef.current.getSenders().forEach((sender) => {
+                    if (sender.track) {
+                        sender.track.stop()
+                    }
+                })
+
+                pcRef.current.close()
+                pcRef.current = null
+            }
+
+            // Stop local stream tracks if they exist
+            if (localStream) {
+                localStream.getTracks().forEach((track) => track.stop())
+            }
+
+            // Reset state
+            setLocalStream(null)
+            setRemoteStream(null)
+            setDataChannel(null)
+            setSessionStatus("DISCONNECTED")
+            setIsPTTUserSpeaking(false)
+            dcRef.current = null
+
+            logClientEvent({}, "disconnected")
+        } catch (error) {
+            console.error("Error in disconnectFromRealtime:", error)
         }
-        setDataChannel(null)
-        setSessionStatus("DISCONNECTED")
-        setIsPTTUserSpeaking(false)
-
-        logClientEvent({}, "disconnected")
     }
 
     const sendSimulatedUserMessage = (text: string) => {
@@ -210,10 +284,12 @@ function Logic() {
         )
         sendClientEvent({ type: "response.create" }, "(trigger response after simulated user text message)")
     }
-    let updateSessionCounter = 0
+    // Use ref instead of let for the counter to avoid memory issues
+    const updateSessionCounterRef = useRef(0)
     const updateSession = (shouldTriggerResponse: boolean = false) => {
-        updateSessionCounter++ // Increment counter on each function call
-        console.log(`updateSession has been called ${updateSessionCounter} times`)
+        // todo remove 286, 289-290
+        updateSessionCounterRef.current++ // Increment counter on each function call
+        console.log(`updateSession has been called ${updateSessionCounterRef.current} times`)
         sendClientEvent({ type: "input_audio_buffer.clear" }, "clear audio buffer on session update")
 
         const currentAgent = selectedAgentConfigSet?.find((a) => a.name === selectedAgentName)
@@ -250,9 +326,10 @@ function Logic() {
         if (shouldTriggerResponse) {
             sendSimulatedUserMessage("hi")
         }
-        if (shouldTriggerResponse && updateSessionCounter <= 2) {
-            sendSimulatedUserMessage("hi")
-        }
+        // todo remove
+        // if (shouldTriggerResponse && updateSessionCounterRef.current <= 2) {
+        //     sendSimulatedUserMessage("hi")
+        // }
     }
 
     const cancelAssistantSpeech = async () => {
@@ -314,9 +391,13 @@ function Logic() {
 
     const onToggleConnection = () => {
         if (sessionStatus === "CONNECTED" || sessionStatus === "CONNECTING") {
+            // Set the manual disconnect flag to true so we don't auto-reconnect
+            manualDisconnectRef.current = true
             disconnectFromRealtime()
             setSessionStatus("DISCONNECTED")
         } else {
+            // Manual connection request, clear the flag
+            manualDisconnectRef.current = false
             connectToRealtime()
         }
     }
@@ -339,6 +420,8 @@ function Logic() {
         if (storedAudioPlaybackEnabled) {
             setIsAudioPlaybackEnabled(storedAudioPlaybackEnabled === "true")
         }
+
+        // No cleanup needed for this effect as it only runs once
     }, [])
 
     useEffect(() => {
@@ -411,8 +494,9 @@ function Logic() {
                     </div>
                 )}
             </div>
-
-            <div className="flex flex-1 gap-2 px-2 overflow-hidden relative">
+            {/* flex-col items-center justify-center  */}
+            <div className="flex flex-col md:flex-row flex-1 gap-2 px-2 overflow-hidden relative">
+                {/* <div className="flex flex-col md:flex-row items-center flex-1 gap-2 px-2 overflow-hidden relative"></div>     */}
                 <Transcript
                     userText={userText}
                     setUserText={setUserText}
@@ -420,6 +504,7 @@ function Logic() {
                     canSend={sessionStatus === "CONNECTED" && dcRef.current?.readyState === "open"}
                 />
 
+                <AudioDancerComponent localStream={localStream} remoteStream={remoteStream} />
                 <Events isExpanded={isEventsPaneExpanded} />
             </div>
 

@@ -65,6 +65,7 @@ export interface ServerEvent {
     item_id?: string
     transcript?: string
     audio_end_ms?: number
+    response_id?: string
     delta?: string
     session?: {
         id?: string
