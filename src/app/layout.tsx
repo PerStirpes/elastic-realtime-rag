@@ -4,9 +4,15 @@ import "./globals.css"
 import { FullStoryScript } from "./components/fullstory-script"
 
 export const metadata: Metadata = {
-    title: "Elastic Realtime API Agents",
+    title: "Elastic Realtime Agents",
     description:
         "Power insights and outcomes with The Elastic Search AI Platform. See into your data and find answers that matter with enterprise solutions designed to help you accelerate time to insight. Try Elastic ...",
+    themeColor: "white",
+    openGraph: {
+        title: "Elastic Realtime Agents",
+        description: "The Elastic Search AI Platform",
+        images: ["/elastic-glyph.png"],
+    },
 }
 
 export default function RootLayout({
@@ -25,9 +31,9 @@ export default function RootLayout({
                 <Script id="elastic-apm-init" strategy="beforeInteractive">
                     {`
             elasticApm.init({
-              serviceName: 'capstone-frontend',
+              serviceName: 'realtime-frontend',
               serverUrl: 'https://abbe56903b824f85b28892772f898006.apm.us-east-1.aws.cloud.es.io:443',
-              environment: 'production',
+              environment: '${process.env.NODE_ENV || "development"}',
             });
           `}
                 </Script>
