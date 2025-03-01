@@ -111,7 +111,10 @@ export function useHandleServerEvent({
                 const newAgentConfig = selectedAgentConfigSet?.find((a) => a.name === destinationAgent) || null
 
                 if (newAgentConfig) {
-                    setSelectedAgentName(destinationAgent)
+                    console.log(`Transferring to agent: ${destinationAgent}`);
+                    setSelectedAgentName(destinationAgent);
+                } else {
+                    console.error(`Failed to transfer - agent not found: ${destinationAgent}`);
                 }
 
                 const functionCallOutput = {

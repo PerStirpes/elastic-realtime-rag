@@ -1,9 +1,17 @@
 "use client"
 
-import React, { useEffect, useRef, useState, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
-import { v4 as uuidv4 } from "uuid"
+import React, { Suspense } from "react"
 import { ErrorBoundary } from "react-error-boundary"
+
+// Components
+import { Header } from "./components/Header"
+import { Main } from "./components/Main"
+import BottomToolbar from "./components/BottomToolbar"
+
+// Custom hooks
+import { useAgentSelection } from "./hooks/useAgentSelection"
+import { useRealtimeConnection } from "./hooks/useRealtimeConnection"
+import { useEventsPaneState } from "./hooks/useEventsPaneState"
 
 // Loading component for Suspense
 function Loading() {
@@ -20,494 +28,74 @@ function ErrorFallback({ error }: { error: Error }) {
     )
 }
 
-import Image from "next/image"
-
-// UI components
-import Transcript from "./components/Transcript"
-import Events from "./components/Events"
-import BottomToolbar from "./components/BottomToolbar"
-import AudioDancerComponent from "./components/AudioDancerComponent"
-
-// Types
-import { AgentConfig, SessionStatus } from "@/app/types"
-
-// Context providers & hooks
-import { useTranscript } from "@/app/contexts/TranscriptContext"
-import { useEvent } from "@/app/contexts/EventContext"
-import { useHandleServerEvent } from "./hooks/useHandleServerEvent"
-
-// Utilities
-import { createRealtimeConnection } from "./lib/realtimeConnection"
-
-// Agent configs
-import { allAgentSets, defaultAgentSetKey } from "@/app/agentConfigs"
-
 function Logic() {
-    const searchParams = useSearchParams()
-
-    const { transcriptItems, addTranscriptMessage, addTranscriptBreadcrumb } = useTranscript()
-    const { logClientEvent, logServerEvent } = useEvent()
-
-    const [selectedAgentName, setSelectedAgentName] = useState<string>("")
-    const [selectedAgentConfigSet, setSelectedAgentConfigSet] = useState<AgentConfig[] | null>(null)
-
-    const [dataChannel, setDataChannel] = useState<RTCDataChannel | null>(null)
-    const pcRef = useRef<RTCPeerConnection | null>(null)
-    const dcRef = useRef<RTCDataChannel | null>(null)
-    const audioElementRef = useRef<HTMLAudioElement | null>(null)
-    // Reference to store event handlers for cleanup
-    const dcEventHandlersRef = useRef<{
-        open: () => void
-        close: () => void
-        error: (err: any) => void
-        message: (e: MessageEvent) => void
-    } | null>(null)
-    const [sessionStatus, setSessionStatus] = useState<SessionStatus>("DISCONNECTED")
-
-    const [isEventsPaneExpanded, setIsEventsPaneExpanded] = useState<boolean>(false)
-    const [userText, setUserText] = useState<string>("")
-    const [isPTTActive, setIsPTTActive] = useState<boolean>(false)
-    const [isPTTUserSpeaking, setIsPTTUserSpeaking] = useState<boolean>(false)
-    const [isAudioPlaybackEnabled, setIsAudioPlaybackEnabled] = useState<boolean>(true)
-    const [localStream, setLocalStream] = useState<MediaStream | null>(null)
-    const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
-    const sendClientEvent = (eventObj: any, eventNameSuffix = "") => {
-        if (dcRef.current && dcRef.current.readyState === "open") {
-            logClientEvent(eventObj, eventNameSuffix)
-            dcRef.current.send(JSON.stringify(eventObj))
-        } else {
-            logClientEvent({ attemptedEvent: eventObj.type }, "error.data_channel_not_open")
-            console.log("Failed to send message - data channel not open", eventObj.type)
-            console.error("Failed to send message - no data channel available", eventObj)
-        }
-    }
-
-    const handleServerEventRef = useHandleServerEvent({
-        setSessionStatus,
-        selectedAgentName,
-        selectedAgentConfigSet,
-        sendClientEvent,
+    // Use custom hooks for different aspects of the application
+    const { 
+        selectedAgentName, 
         setSelectedAgentName,
-    })
+        selectedAgentConfigSet, 
+        handleSelectedAgentChange, 
+        agentSetKey
+    } = useAgentSelection();
+    
+    const { isEventsPaneExpanded, setIsEventsPaneExpanded } = useEventsPaneState();
+    
+    const { 
+        sessionStatus,
+        localStream,
+        remoteStream,
+        isPTTActive,
+        setIsPTTActive,
+        isPTTUserSpeaking,
+        isAudioPlaybackEnabled,
+        setIsAudioPlaybackEnabled,
+        userText,
+        setUserText,
+        onToggleConnection,
+        handleSendTextMessage,
+        handleTalkButtonDown,
+        handleTalkButtonUp,
+        canSend
+    } = useRealtimeConnection({ 
+        selectedAgentName, 
+        setSelectedAgentName,
+        selectedAgentConfigSet 
+    });
 
-    useEffect(() => {
-        let finalAgentConfig = searchParams.get("agentConfig")
-        if (!finalAgentConfig || !allAgentSets[finalAgentConfig]) {
-            finalAgentConfig = defaultAgentSetKey
-            const url = new URL(window.location.toString())
-            url.searchParams.set("agentConfig", finalAgentConfig)
-            window.location.replace(url.toString())
-            return
-        }
+    // Note: All connection-related functions are now in the useRealtimeConnection hook
 
-        const agents = allAgentSets[finalAgentConfig]
-        const agentKeyToUse = agents[0]?.name || ""
 
-        setSelectedAgentName(agentKeyToUse)
-        setSelectedAgentConfigSet(agents)
-    }, [searchParams])
+    // Note: The handleSendTextMessage function is now provided by the useRealtimeConnection hook
 
-    // Store whether the disconnect was manually triggered
-    const manualDisconnectRef = useRef(false)
+    // Note: The PTT handler functions are now provided by the useRealtimeConnection hook
 
-    useEffect(() => {
-        if (selectedAgentName && sessionStatus === "DISCONNECTED" && !manualDisconnectRef.current) {
-            connectToRealtime()
-        }
-        // Reset the manual disconnect flag when status changes to CONNECTED
-        if (sessionStatus === "CONNECTED") {
-            manualDisconnectRef.current = false
-        }
-    }, [selectedAgentName, sessionStatus])
+    // Note: The onToggleConnection function is now provided by the useRealtimeConnection hook
 
-    useEffect(() => {
-        if (sessionStatus === "CONNECTED" && selectedAgentConfigSet && selectedAgentName) {
-            const currentAgent = selectedAgentConfigSet.find((a) => a.name === selectedAgentName)
-            addTranscriptBreadcrumb(`Agent: ${selectedAgentName}`, currentAgent)
-            updateSession(true)
-        }
-    }, [selectedAgentConfigSet, selectedAgentName, sessionStatus])
+    // Note: The handleSelectedAgentChange function is now provided by the useAgentSelection hook
 
-    useEffect(() => {
-        if (sessionStatus === "CONNECTED") {
-            console.log(`updatingSession, isPTTACtive=${isPTTActive} sessionStatus=${sessionStatus}`)
-            updateSession()
-        }
-    }, [isPTTActive])
+    // Note: The localStorage effects are now handled in the respective custom hooks
 
-    const fetchEphemeralKey = async (): Promise<string | null> => {
-        logClientEvent({ url: "/session" }, "fetch_session_token_request")
-        const tokenResponse = await fetch("/api/session")
-        const data = await tokenResponse.json()
-        logServerEvent(data, "fetch_session_token_response")
-
-        if (!data.client_secret?.value) {
-            logClientEvent(data, "error.no_ephemeral_key")
-            console.error("No ephemeral key provided by the server")
-            setSessionStatus("DISCONNECTED")
-            return null
-        }
-
-        return data.client_secret.value
-    }
-
-    const connectToRealtime = async () => {
-        if (sessionStatus !== "DISCONNECTED") return
-        setSessionStatus("CONNECTING")
-
-        try {
-            const EPHEMERAL_KEY = await fetchEphemeralKey()
-            if (!EPHEMERAL_KEY) {
-                return
-            }
-
-            if (!audioElementRef.current) {
-                audioElementRef.current = document.createElement("audio")
-            }
-            audioElementRef.current.autoplay = isAudioPlaybackEnabled
-
-            const { pc, dc, localStream } = await createRealtimeConnection(EPHEMERAL_KEY, audioElementRef)
-            pcRef.current = pc
-            dcRef.current = dc
-            setLocalStream(localStream)
-
-            // Attach remote stream to state once available.
-            // (Wait a moment for the ontrack event to fire.)
-            const timeoutId = setTimeout(() => {
-                if (audioElementRef.current && audioElementRef.current.srcObject) {
-                    setRemoteStream(audioElementRef.current.srcObject as MediaStream)
-                }
-            }, 1000)
-
-            // Clear timeout on disconnect
-            pcRef.current.addEventListener("iceconnectionstatechange", () => {
-                if (
-                    pcRef.current?.iceConnectionState === "disconnected" ||
-                    pcRef.current?.iceConnectionState === "failed" ||
-                    pcRef.current?.iceConnectionState === "closed"
-                ) {
-                    clearTimeout(timeoutId)
-                }
-            })
-            // Store event listeners for cleanup
-            const handleOpen = () => {
-                logClientEvent({}, "data_channel.open")
-            }
-            const handleClose = () => {
-                logClientEvent({}, "data_channel.close")
-            }
-            const handleError = (err: any) => {
-                logClientEvent({ error: err }, "data_channel.error")
-            }
-            const handleMessage = (e: MessageEvent) => {
-                handleServerEventRef.current(JSON.parse(e.data))
-            }
-
-            dc.addEventListener("open", handleOpen)
-            dc.addEventListener("close", handleClose)
-            dc.addEventListener("error", handleError)
-            dc.addEventListener("message", handleMessage)
-
-            // Store the event handlers in refs for cleanup
-            dcEventHandlersRef.current = {
-                open: handleOpen,
-                close: handleClose,
-                error: handleError,
-                message: handleMessage,
-            }
-
-            setDataChannel(dc)
-        } catch (err) {
-            console.error("Error connecting to realtime:", err)
-            setSessionStatus("DISCONNECTED")
-        }
-    }
-
-    const disconnectFromRealtime = () => {
-        try {
-            // Clean up event listeners from data channel
-            if (dcRef.current && dcEventHandlersRef.current) {
-                const handlers = dcEventHandlersRef.current
-                dcRef.current.removeEventListener("open", handlers.open)
-                dcRef.current.removeEventListener("close", handlers.close)
-                dcRef.current.removeEventListener("error", handlers.error)
-                dcRef.current.removeEventListener("message", handlers.message)
-                dcEventHandlersRef.current = null
-            }
-
-            // Stop and clean up RTCPeerConnection
-            if (pcRef.current) {
-                pcRef.current.getSenders().forEach((sender) => {
-                    if (sender.track) {
-                        sender.track.stop()
-                    }
-                })
-
-                pcRef.current.close()
-                pcRef.current = null
-            }
-
-            // Stop local stream tracks if they exist
-            if (localStream) {
-                localStream.getTracks().forEach((track) => track.stop())
-            }
-
-            // Reset state
-            setLocalStream(null)
-            setRemoteStream(null)
-            setDataChannel(null)
-            setSessionStatus("DISCONNECTED")
-            setIsPTTUserSpeaking(false)
-            dcRef.current = null
-
-            logClientEvent({}, "disconnected")
-        } catch (error) {
-            console.error("Error in disconnectFromRealtime:", error)
-        }
-    }
-
-    const sendSimulatedUserMessage = (text: string) => {
-        const id = uuidv4().slice(0, 32)
-        addTranscriptMessage(id, "user", text, true)
-
-        sendClientEvent(
-            {
-                type: "conversation.item.create",
-                item: {
-                    id,
-                    type: "message",
-                    role: "user",
-                    content: [{ type: "input_text", text }],
-                },
-            },
-            "(simulated user text message)",
-        )
-        sendClientEvent({ type: "response.create" }, "(trigger response after simulated user text message)")
-    }
-    // Use ref instead of let for the counter to avoid memory issues
-    const updateSessionCounterRef = useRef(0)
-    const updateSession = (shouldTriggerResponse: boolean = false) => {
-        // todo remove 286, 289-290
-        updateSessionCounterRef.current++ // Increment counter on each function call
-        console.log(`updateSession has been called ${updateSessionCounterRef.current} times`)
-        sendClientEvent({ type: "input_audio_buffer.clear" }, "clear audio buffer on session update")
-
-        const currentAgent = selectedAgentConfigSet?.find((a) => a.name === selectedAgentName)
-
-        const turnDetection = isPTTActive
-            ? null
-            : {
-                  type: "server_vad",
-                  threshold: 0.5,
-                  prefix_padding_ms: 300,
-                  silence_duration_ms: 200,
-                  create_response: true,
-              }
-
-        const instructions = currentAgent?.instructions || ""
-        const tools = currentAgent?.tools || []
-
-        const sessionUpdateEvent = {
-            type: "session.update",
-            session: {
-                modalities: ["text", "audio"],
-                instructions,
-                voice: "echo",
-                input_audio_format: "pcm16",
-                output_audio_format: "pcm16",
-                input_audio_transcription: { model: "whisper-1" },
-                turn_detection: turnDetection,
-                tools,
-                temperature: 0.8,
-            },
-        }
-
-        sendClientEvent(sessionUpdateEvent)
-        if (shouldTriggerResponse) {
-            sendSimulatedUserMessage("hi")
-        }
-        // todo remove
-        // if (shouldTriggerResponse && updateSessionCounterRef.current <= 2) {
-        //     sendSimulatedUserMessage("hi")
-        // }
-    }
-
-    const cancelAssistantSpeech = async () => {
-        const mostRecentAssistantMessage = [...transcriptItems].reverse().find((item) => item.role === "assistant")
-
-        if (!mostRecentAssistantMessage) {
-            console.warn("can't cancel, no recent assistant message found")
-            return
-        }
-        if (mostRecentAssistantMessage.status === "DONE") {
-            console.log("No truncation needed, message is DONE")
-            return
-        }
-
-        sendClientEvent({
-            type: "conversation.item.truncate",
-            item_id: mostRecentAssistantMessage?.itemId,
-            content_index: 0,
-            audio_end_ms: Date.now() - mostRecentAssistantMessage.createdAtMs,
-        })
-        sendClientEvent({ type: "response.cancel" }, "(cancel due to user interruption)")
-    }
-
-    const handleSendTextMessage = () => {
-        if (!userText.trim()) return
-        cancelAssistantSpeech()
-
-        sendClientEvent(
-            {
-                type: "conversation.item.create",
-                item: {
-                    type: "message",
-                    role: "user",
-                    content: [{ type: "input_text", text: userText.trim() }],
-                },
-            },
-            "(send user text message)",
-        )
-        setUserText("")
-
-        sendClientEvent({ type: "response.create" }, "trigger response")
-    }
-
-    const handleTalkButtonDown = () => {
-        if (sessionStatus !== "CONNECTED" || dataChannel?.readyState !== "open") return
-        cancelAssistantSpeech()
-
-        setIsPTTUserSpeaking(true)
-        sendClientEvent({ type: "input_audio_buffer.clear" }, "clear PTT buffer")
-    }
-
-    const handleTalkButtonUp = () => {
-        if (sessionStatus !== "CONNECTED" || dataChannel?.readyState !== "open" || !isPTTUserSpeaking) return
-
-        setIsPTTUserSpeaking(false)
-        sendClientEvent({ type: "input_audio_buffer.commit" }, "commit PTT")
-        sendClientEvent({ type: "response.create" }, "trigger response PTT")
-    }
-
-    const onToggleConnection = () => {
-        if (sessionStatus === "CONNECTED" || sessionStatus === "CONNECTING") {
-            // Set the manual disconnect flag to true so we don't auto-reconnect
-            manualDisconnectRef.current = true
-            disconnectFromRealtime()
-            setSessionStatus("DISCONNECTED")
-        } else {
-            // Manual connection request, clear the flag
-            manualDisconnectRef.current = false
-            connectToRealtime()
-        }
-    }
-
-    const handleSelectedAgentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const newAgentName = e.target.value
-        setSelectedAgentName(newAgentName)
-    }
-
-    useEffect(() => {
-        const storedPushToTalkUI = localStorage.getItem("pushToTalkUI")
-        if (storedPushToTalkUI) {
-            setIsPTTActive(storedPushToTalkUI === "true")
-        }
-        const storedLogsExpanded = localStorage.getItem("logsExpanded")
-        if (storedLogsExpanded) {
-            setIsEventsPaneExpanded(storedLogsExpanded === "true")
-        }
-        const storedAudioPlaybackEnabled = localStorage.getItem("audioPlaybackEnabled")
-        if (storedAudioPlaybackEnabled) {
-            setIsAudioPlaybackEnabled(storedAudioPlaybackEnabled === "true")
-        }
-
-        // No cleanup needed for this effect as it only runs once
-    }, [])
-
-    useEffect(() => {
-        localStorage.setItem("pushToTalkUI", isPTTActive.toString())
-    }, [isPTTActive])
-
-    useEffect(() => {
-        localStorage.setItem("logsExpanded", isEventsPaneExpanded.toString())
-    }, [isEventsPaneExpanded])
-
-    useEffect(() => {
-        localStorage.setItem("audioPlaybackEnabled", isAudioPlaybackEnabled.toString())
-    }, [isAudioPlaybackEnabled])
-
-    useEffect(() => {
-        if (audioElementRef.current) {
-            if (isAudioPlaybackEnabled) {
-                audioElementRef.current.play().catch((err) => {
-                    console.warn("Autoplay may be blocked by browser:", err)
-                })
-            } else {
-                audioElementRef.current.pause()
-            }
-        }
-    }, [isAudioPlaybackEnabled])
-
-    const agentSetKey = searchParams.get("agentConfig") || "default"
+    // Note: agentSetKey is now provided by the useAgentSelection hook
 
     return (
         <div className="text-base flex flex-col h-screen bg-gray-100 text-gray-800 relative">
-            <div className="p-5 text-lg font-semibold flex flex-col sm:flex-row justify-between items-center">
-                {/* Left Section: Logo and Title */}
-                <div className="flex items-center mb-3 sm:mb-0 w-full sm:w-auto">
-                    <div onClick={() => window.location.reload()} className="cursor-pointer">
-                        <Image src="/elastic-glyph.svg" alt="Elastic Logo" width={20} height={20} className="mr-2" />
-                    </div>
-                    <div className="font-mierb">
-                        Realtime Elasticsearch <span className="text-primary">Agents</span>
-                    </div>
-                </div>
-
-                {/* Right Section: Agent Select (if available) */}
-                {agentSetKey && (
-                    <div className="flex items-center w-full sm:w-auto">
-                        <label className="flex items-center text-base gap-1 mr-2 font-medium whitespace-nowrap">
-                            Agent
-                        </label>
-                        <div className="relative inline-block w-full sm:w-auto">
-                            <select
-                                value={selectedAgentName}
-                                onChange={handleSelectedAgentChange}
-                                className="appearance-none border border-gray-300 rounded-lg text-base px-2 py-1 pr-8 cursor-pointer font-normal focus:outline-none w-full"
-                            >
-                                {selectedAgentConfigSet?.map((agent) => (
-                                    <option key={agent.name} value={agent.name}>
-                                        {agent.name}
-                                    </option>
-                                ))}
-                            </select>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 text-gray-600">
-                                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                    <path
-                                        fillRule="evenodd"
-                                        d="M5.23 7.21a.75.75 0 011.06.02L10 10.44l3.71-3.21a.75.75 0 111.04 1.08l-4.25 3.65a.75.75 0 01-1.04 0L5.21 8.27a.75.75 0 01.02-1.06z"
-                                        clipRule="evenodd"
-                                    />
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-            {/* flex-col items-center justify-center  */}
-            <div className="flex flex-col md:flex-row flex-1 gap-2 px-2 overflow-hidden relative">
-                {/* <div className="flex flex-col md:flex-row items-center flex-1 gap-2 px-2 overflow-hidden relative"></div>     */}
-                <Transcript
-                    userText={userText}
-                    setUserText={setUserText}
-                    onSendMessage={handleSendTextMessage}
-                    canSend={sessionStatus === "CONNECTED" && dcRef.current?.readyState === "open"}
-                />
-
-                <AudioDancerComponent localStream={localStream} remoteStream={remoteStream} />
-                <Events isExpanded={isEventsPaneExpanded} />
-            </div>
-
+            <Header 
+                agentSetKey={agentSetKey}
+                selectedAgentName={selectedAgentName}
+                selectedAgentConfigSet={selectedAgentConfigSet}
+                onAgentChange={handleSelectedAgentChange}
+            />
+            
+            <Main
+                userText={userText}
+                setUserText={setUserText}
+                onSendMessage={handleSendTextMessage}
+                canSend={canSend}
+                localStream={localStream}
+                remoteStream={remoteStream}
+                isEventsPaneExpanded={isEventsPaneExpanded}
+            />
+            
             <BottomToolbar
                 sessionStatus={sessionStatus}
                 onToggleConnection={onToggleConnection}
