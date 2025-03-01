@@ -30,17 +30,12 @@ function ErrorFallback({ error }: { error: Error }) {
 
 function Logic() {
     // Use custom hooks for different aspects of the application
-    const { 
-        selectedAgentName, 
-        setSelectedAgentName,
-        selectedAgentConfigSet, 
-        handleSelectedAgentChange, 
-        agentSetKey
-    } = useAgentSelection();
-    
-    const { isEventsPaneExpanded, setIsEventsPaneExpanded } = useEventsPaneState();
-    
-    const { 
+    const { selectedAgentName, setSelectedAgentName, selectedAgentConfigSet, handleSelectedAgentChange, agentSetKey } =
+        useAgentSelection()
+
+    const { isEventsPaneExpanded, setIsEventsPaneExpanded } = useEventsPaneState()
+
+    const {
         sessionStatus,
         localStream,
         remoteStream,
@@ -55,37 +50,22 @@ function Logic() {
         handleSendTextMessage,
         handleTalkButtonDown,
         handleTalkButtonUp,
-        canSend
-    } = useRealtimeConnection({ 
-        selectedAgentName, 
+        canSend,
+    } = useRealtimeConnection({
+        selectedAgentName,
         setSelectedAgentName,
-        selectedAgentConfigSet 
-    });
-
-    // Note: All connection-related functions are now in the useRealtimeConnection hook
-
-
-    // Note: The handleSendTextMessage function is now provided by the useRealtimeConnection hook
-
-    // Note: The PTT handler functions are now provided by the useRealtimeConnection hook
-
-    // Note: The onToggleConnection function is now provided by the useRealtimeConnection hook
-
-    // Note: The handleSelectedAgentChange function is now provided by the useAgentSelection hook
-
-    // Note: The localStorage effects are now handled in the respective custom hooks
-
-    // Note: agentSetKey is now provided by the useAgentSelection hook
+        selectedAgentConfigSet,
+    })
 
     return (
         <div className="text-base flex flex-col h-screen bg-gray-100 text-gray-800 relative">
-            <Header 
+            <Header
                 agentSetKey={agentSetKey}
                 selectedAgentName={selectedAgentName}
                 selectedAgentConfigSet={selectedAgentConfigSet}
                 onAgentChange={handleSelectedAgentChange}
             />
-            
+
             <Main
                 userText={userText}
                 setUserText={setUserText}
@@ -95,7 +75,7 @@ function Logic() {
                 remoteStream={remoteStream}
                 isEventsPaneExpanded={isEventsPaneExpanded}
             />
-            
+
             <BottomToolbar
                 sessionStatus={sessionStatus}
                 onToggleConnection={onToggleConnection}

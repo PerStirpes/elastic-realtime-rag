@@ -7,11 +7,10 @@ export const metadata: Metadata = {
     title: "Elastic Realtime Agents",
     description:
         "Power insights and outcomes with The Elastic Search AI Platform. See into your data and find answers that matter with enterprise solutions designed to help you accelerate time to insight. Try Elastic ...",
-    themeColor: "white",
     openGraph: {
-        title: "Elastic Realtime Agents",
-        description: "The Elastic Search AI Platform",
-        images: ["/elastic-glyph.png"],
+        title: "Elastic — The Search AI Company",
+        description: "Power insights and outcomes with The Elastic Search AI Platform.",
+        images: ["https://www.elastic.co/static-res/images/social_media_default.png"],
     },
 }
 
