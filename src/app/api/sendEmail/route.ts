@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
         return NextResponse.json({ result: "success" })
     } catch (error) {
-        console.error("Error indexing document:", error)
-        return NextResponse.json({ error: "Error indexing document", details: error }, { status: 500 })
+        console.error("Error sending email:", error)
+        return NextResponse.json({ error: "Error sending email", details: error }, { status: 500 })
     }
 }
