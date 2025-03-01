@@ -2,15 +2,13 @@ import greeter from "./greeter"
 import vaAgent from "./vaAgent"
 import elasticExpert from "./elasticBlogsAgent"
 import medicareAgent from "./medicareAgent"
-import veteransCrisisLine from "./veteransCrisisLine"
 import { injectTransferTools } from "../utils"
 
-greeter.downstreamAgents = [vaAgent, elasticExpert, medicareAgent, veteransCrisisLine]
-vaAgent.downstreamAgents = [elasticExpert, medicareAgent, veteransCrisisLine]
-elasticExpert.downstreamAgents = [vaAgent, medicareAgent, veteransCrisisLine]
-medicareAgent.downstreamAgents = [vaAgent, elasticExpert, veteransCrisisLine]
-veteransCrisisLine.downstreamAgents = [vaAgent, elasticExpert, medicareAgent]
+greeter.downstreamAgents = [vaAgent, elasticExpert, medicareAgent]
+vaAgent.downstreamAgents = [elasticExpert, medicareAgent, greeter]
+elasticExpert.downstreamAgents = [vaAgent, medicareAgent, greeter]
+medicareAgent.downstreamAgents = [vaAgent, elasticExpert, greeter]
 
-const agents = injectTransferTools([greeter, vaAgent, elasticExpert, medicareAgent, veteransCrisisLine])
+const agents = injectTransferTools([greeter, vaAgent, elasticExpert, medicareAgent])
 
 export default agents

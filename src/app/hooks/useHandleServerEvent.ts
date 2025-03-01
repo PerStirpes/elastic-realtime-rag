@@ -14,6 +14,7 @@ export interface UseHandleServerEventParams {
     shouldForceResponse?: boolean
 }
 
+//todo clean up event handlding
 export function useHandleServerEvent({
     setSessionStatus,
     selectedAgentName,
@@ -31,9 +32,10 @@ export function useHandleServerEvent({
 
     const { logServerEvent } = useEvent()
 
+    const outputAudioBuffersRef = useRef<string[]>([])
+
     const cancelAssistantSpeech = async () => {
         const mostRecentAssistantMessage = [...transcriptItems].reverse().find((item) => item.role === "assistant")
-
         if (!mostRecentAssistantMessage) {
             console.warn("can't cancel, no recent assistant message found")
             return
@@ -42,13 +44,13 @@ export function useHandleServerEvent({
             console.log("No truncation needed, message is DONE")
             return
         }
-
-        sendClientEvent({
-            type: "conversation.item.truncate",
-            item_id: mostRecentAssistantMessage?.itemId,
-            content_index: 0,
-            audio_end_ms: Date.now() - mostRecentAssistantMessage.createdAtMs,
-        })
+        //todo repair
+        // sendClientEvent({
+        //     type: "conversation.item.truncate",
+        //     item_id: mostRecentAssistantMessage?.itemId,
+        //     content_index: 0,
+        //     audio_end_ms: Date.now() - mostRecentAssistantMessage.createdAtMs,
+        // })
         sendClientEvent({ type: "response.cancel" }, "(cancel due to user interruption)")
     }
 
@@ -83,7 +85,7 @@ export function useHandleServerEvent({
         // 2. Wrap the rest of the processing in a try/catch block
         try {
             const currentAgent = selectedAgentConfigSet?.find((a) => a.name === selectedAgentName)
-
+            //todo
             // addTranscriptBreadcrumb(`function call: ${functionCallParams.name}`, args)
 
             if (currentAgent?.toolLogic?.[functionCallParams.name]) {
@@ -108,7 +110,10 @@ export function useHandleServerEvent({
                 const newAgentConfig = selectedAgentConfigSet?.find((a) => a.name === destinationAgent) || null
 
                 if (newAgentConfig) {
+                    console.log(`Transferring to agent: ${destinationAgent}`)
                     setSelectedAgentName(destinationAgent)
+                } else {
+                    console.error(`Failed to transfer - agent not found: ${destinationAgent}`)
                 }
 
                 const functionCallOutput = {
@@ -161,7 +166,9 @@ export function useHandleServerEvent({
 
     const handleServerEvent = (serverEvent: ServerEvent) => {
         logServerEvent(serverEvent)
-
+        let text = serverEvent.item?.content?.[0]?.text || serverEvent.item?.content?.[0]?.transcript || ""
+        const role = serverEvent.item?.role as "user" | "assistant"
+        const itemId = serverEvent.item?.id
         switch (serverEvent.type) {
             case "session.created": {
                 if (serverEvent.session?.id) {
@@ -174,17 +181,22 @@ export function useHandleServerEvent({
             }
 
             case "conversation.item.created": {
-                let text = serverEvent.item?.content?.[0]?.text || serverEvent.item?.content?.[0]?.transcript || ""
-                const role = serverEvent.item?.role as "user" | "assistant"
-                const itemId = serverEvent.item?.id
+                // let text = serverEvent.item?.content?.[0]?.text || serverEvent.item?.content?.[0]?.transcript || ""
+                // const role = serverEvent.item?.role as "user" | "assistant"
+                // const itemId = serverEvent.item?.id
 
                 if (itemId && transcriptItems.some((item) => item.itemId === itemId)) {
                     break
                 }
 
                 if (itemId && role) {
-                    if (role === "user" && !text) {
-                        text = "[Transcribing...]"
+                    if (role === "user") {
+                        // If the text is empty (e.g., during audio transcription), you can set a placeholder
+                        if (!text) {
+                            text = "[Transcribing...]"
+                        }
+                        // User message detected: cancel any ongoing audio response
+                        cancelAssistantSpeech()
                     }
                     addTranscriptMessage(itemId, role, text)
                 }
@@ -193,8 +205,9 @@ export function useHandleServerEvent({
 
             case "conversation.item.truncated": {
                 const audioEndMs = serverEvent.audio_end_ms
-                addTranscriptBreadcrumb(`[Truncated at ${audioEndMs}]`)
-                // cancelAssistantSpeech()
+
+                addTranscriptBreadcrumb(`[Truncated at ${audioEndMs}],`)
+                cancelAssistantSpeech()
                 break
             }
             case "conversation.item.input_audio_transcription.completed": {
@@ -227,6 +240,30 @@ export function useHandleServerEvent({
                             })
                         }
                     })
+                }
+                break
+            }
+
+            // Handle creation of an output audio buffer.
+            case "output_audio_buffer.started": {
+                // Assuming serverEvent carries a unique buffer ID in serverEvent.response_id.
+                if (serverEvent.response_id) {
+                    // Limit the size of the array to prevent memory leaks
+                    if (outputAudioBuffersRef.current.length > 100) {
+                        outputAudioBuffersRef.current = outputAudioBuffersRef.current.slice(-100)
+                    }
+                    outputAudioBuffersRef.current.push(serverEvent.response_id)
+                }
+                break
+            }
+
+            // Handle deletion of an output audio buffer.
+            case "output_audio_buffer.stopped":
+            case "output_audio_buffer.cleared": {
+                if (serverEvent.response_id) {
+                    outputAudioBuffersRef.current = outputAudioBuffersRef.current.filter(
+                        (id) => id !== serverEvent.response_id,
+                    )
                 }
                 break
             }

@@ -3,7 +3,7 @@ import { RefObject } from "react"
 export async function createRealtimeConnection(
     EPHEMERAL_KEY: string,
     audioElement: RefObject<HTMLAudioElement | null>,
-): Promise<{ pc: RTCPeerConnection; dc: RTCDataChannel }> {
+): Promise<{ pc: RTCPeerConnection; dc: RTCDataChannel; localStream: MediaStream }> {
     const pc = new RTCPeerConnection()
 
     pc.ontrack = (e) => {
@@ -40,5 +40,5 @@ export async function createRealtimeConnection(
 
     await pc.setRemoteDescription(answer)
 
-    return { pc, dc }
+    return { pc, dc, localStream: ms }
 }

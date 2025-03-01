@@ -5,16 +5,17 @@ interface SearchResult {
         hits: {
             _source?: {
                 body_content?: string
-                title?: string
                 additional_urls?: string[]
             }
         }[]
     }
 }
 
-function extractBodyContentAndUrls(
-    data: SearchResult,
-): { body_content: string; additional_urls: string[]; title: string }[] {
+function extractBodyContentAndUrls(data: SearchResult): {
+    body_content: string
+    additional_urls: string[]
+}[] {
+    // todo remove, this was moved into elastic, need to reprocess the index
     // Regex pattern to remove the unwanted block of text (handles minor variations)
     const regexToRemove =
         /Skip to Content\s*An official website of the United States government\s*Here’s how you know\s*The \.gov means it’s official\..*?Talk to the Veterans Crisis Line now\s*/gs
@@ -22,7 +23,6 @@ function extractBodyContentAndUrls(
     return data.hits.hits.map((hit) => ({
         body_content: (hit._source?.body_content ?? "").replace(regexToRemove, "").trim(),
         additional_urls: hit._source?.additional_urls ?? [],
-        title: hit._source?.title ?? "",
     }))
 }
 

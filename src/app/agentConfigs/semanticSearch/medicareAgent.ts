@@ -2,12 +2,13 @@ import { AgentConfig } from "@/app/types"
 
 const medicareAgent: AgentConfig = {
     name: "Medicare Expert",
-    publicDescription: "Medicare expert specialized in searching the medcare.gov website.",
+    publicDescription: "Medicare expert specialized in searching the medicare.gov website.",
     instructions: `
       **Important:** For every user query ##Always invoke **searchMedicare** when handling a search query.
 # Personality and Tone
 - Identity: A calm, friendly, and knowledgeable Medicare expert.
 - Task: Queries the “search-medicare” index to find relevant content and summarizes them with direct URLs.
+- Task: If the user requests for an email  **Important:** Ask user for their email and call the **sendEmail** function. 
 - Demeanor: Neutral, measured, and helpful.
 - Tone: Casual but clear and professional.
 - Avoid guesswork; only provide content found in the search.
@@ -22,8 +23,7 @@ const medicareAgent: AgentConfig = {
 - Call \`searchMedicare\` function with the user’s query to retrieve relevant posts.
 - If the search returns results, pass them to \`summarizeContent\`.
 - If no results, gently recommend alternative queries or additional filters.
-
-
+- If the user is satisfied with the results, Ask the user for their email and then call \`sendEmail\` to send the results to the user. 
 `,
     tools: [
         {
@@ -52,17 +52,40 @@ const medicareAgent: AgentConfig = {
         - Note that this can take up to 10 seconds, so please provide small updates to the user every few seconds, like 'I just need a little more time'
          - Feel free to share an initial assessment of potential eligibility with the user before calling this function.
         - Include direct URLs
-        - If no results, advise alternative search strategies
-  `,
+        - If no results, advise alternative search strategies `,
             parameters: {
                 type: "object",
                 properties: {
-                    blogs: {
+                    args: {
                         type: "string",
-                        description: "answer the user question with the results of the searchVA function",
+                    },
+                    transcriptLogs: {
+                        type: "string",
                     },
                 },
-                required: ["question"],
+                required: ["args", "transcriptLogs"],
+                additionalProperties: true,
+            },
+        },
+
+        {
+            type: "function",
+            name: "sendEmail",
+            description:
+                "**Important:** Ask the user for their email. Constructs the raw email, and dispatches it through a backend endpoint to send the email.",
+            parameters: {
+                type: "object",
+                properties: {
+                    email: {
+                        type: "string",
+                        description: "The recipient's email address.",
+                    },
+                    transcriptLogs: {
+                        type: "string",
+                        description: "the most recent transcriptLogs",
+                    },
+                },
+                required: ["email", "transcriptLogs"],
                 additionalProperties: false,
             },
         },
@@ -102,6 +125,45 @@ const medicareAgent: AgentConfig = {
   </modelContext>
   
   `
+        },
+        sendEmail: async (email, transcriptLogs) => {
+            try {
+                function extractTitleAndRole(
+                    transcriptLogs: { role: string | undefined; title: string }[],
+                ): { title: string; role: string }[] {
+                    return transcriptLogs
+                        .filter(
+                            ({ role, title }) =>
+                                role &&
+                                (role === "user" || role === "assistant") &&
+                                !/^hi\b|^hello\b/i.test(title) &&
+                                !/\[inaudible\]/i.test(title),
+                        )
+                        .map(({ title, role }) => ({ title, role: role as string }))
+                }
+                const filteredTitles = extractTitleAndRole(
+                    transcriptLogs.filter((log) => log.role !== undefined) as { role: string; title: string }[],
+                )
+                console.log("filteredTitles", filteredTitles)
+                const response = await fetch(`/api/sendEmail`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ email: email, message: filteredTitles }),
+                })
+
+                if (!response.ok) {
+                    console.error("Error from server:", response)
+                    return { error: "Server error while sending email." }
+                }
+                const result = await response.json()
+                console.log("result", result)
+                return { result }
+            } catch (error) {
+                console.error("[MedicareExpert] sendEmail encountered an error:", error)
+                return { error: "An unexpected error occurred while sending the email." }
+            }
         },
     },
 }
