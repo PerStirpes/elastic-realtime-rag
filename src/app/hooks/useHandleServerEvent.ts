@@ -35,8 +35,6 @@ export function useHandleServerEvent({
 
     const cancelAssistantSpeech = async () => {
         const mostRecentAssistantMessage = [...transcriptItems].reverse().find((item) => item.role === "assistant")
-        //todo remove
-        addTranscriptBreadcrumb(`mostRecentAssistantMessage ${JSON.stringify(mostRecentAssistantMessage, null, 2)}`)
         if (!mostRecentAssistantMessage) {
             console.warn("can't cancel, no recent assistant message found")
             return
