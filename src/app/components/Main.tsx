@@ -31,10 +31,12 @@ export function Main({
         canSend={canSend}
       />
 
-      <AudioDancerComponent 
-        localStream={localStream} 
-        remoteStream={remoteStream} 
-      />
+      <div className="flex-shrink-0 flex items-center justify-center w-full md:w-auto order-last md:order-none" style={{ minHeight: "235px" }}>
+        <AudioDancerComponent 
+          localStream={localStream} 
+          remoteStream={remoteStream} 
+        />
+      </div>
       
       <Events isExpanded={isEventsPaneExpanded} />
     </div>
