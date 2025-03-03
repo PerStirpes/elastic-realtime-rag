@@ -1,4 +1,5 @@
 import { AgentConfig } from "@/app/types"
+import { elasticSearchUtil } from "../utils"
 
 const elasticExpert: AgentConfig = {
     name: "Elastic Expert",
@@ -60,27 +61,7 @@ Notes:
     ],
     toolLogic: {
         searchElasticBlogs: async ({ query }: { query: string }) => {
-            try {
-                console.log(`[toolLogic] Searching blogs for: ${query}`)
-                const response = await fetch(`/api/elasticsearch?q=${encodeURIComponent(query)}`, {
-                    method: "GET",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                })
-
-                if (!response.ok) {
-                    const errorMsg = `Error ${response.status}: ${response.statusText}`
-                    console.error("[toolLogic]", errorMsg)
-                    return { error: errorMsg }
-                }
-
-                const result = await response.json()
-                return { result }
-            } catch (error) {
-                console.error("[toolLogic] Fetch error:", error)
-                return { error: "An error occurred while fetching blog posts." }
-            }
+            return elasticSearchUtil(query, "elasticsearch", "ElasticExpert");
         },
         summarizeBlogs: async (args, transcriptLogs) => {
             console.log("[toolLogic] summarizeBlogs args:", args)

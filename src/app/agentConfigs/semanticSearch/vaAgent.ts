@@ -1,4 +1,5 @@
 import { AgentConfig } from "@/app/types"
+import { sendEmailUtil, elasticSearchUtil } from "../utils"
 
 const vaAgent: AgentConfig = {
     name: "Veteran Affairs Expert",
@@ -68,59 +69,10 @@ const vaAgent: AgentConfig = {
     ],
     toolLogic: {
         searchVA: async ({ query }: { query: string }) => {
-            console.log(`[toolLogic] Searching VA for: ${query}`)
-            const response = await fetch(`/api/va?q=${encodeURIComponent(query)}`, {
-                method: "GET",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-            })
-            if (!response.ok) {
-                console.error("Server returned an error:", response)
-                return { error: "Something went wrong." }
-            }
-            const completion = await response.json()
-            console.log("searchVA completion", completion)
-            return { result: completion }
+            return elasticSearchUtil(query, "va", "VAExpert");
         },
         sendEmail: async (email, transcriptLogs) => {
-            try {
-                function extractTitleAndRole(
-                    transcriptLogs: { role: string | undefined; title: string }[],
-                ): { title: string; role: string }[] {
-                    return transcriptLogs
-                        .filter(
-                            ({ role, title }) =>
-                                role &&
-                                (role === "user" || role === "assistant") &&
-                                !/^hi\b|^hello\b/i.test(title) &&
-                                !/\[inaudible\]/i.test(title),
-                        )
-                        .map(({ title, role }) => ({ title, role: role as string }))
-                }
-                const filteredTitles = extractTitleAndRole(
-                    transcriptLogs.filter((log) => log.role !== undefined) as { role: string; title: string }[],
-                )
-                console.log("filteredTitles", filteredTitles)
-                const response = await fetch(`/api/sendEmail`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({ email: email, message: filteredTitles }),
-                })
-
-                if (!response.ok) {
-                    console.error("Error from server:", response)
-                    return { error: "Server error while sending email." }
-                }
-                const result = await response.json()
-                console.log("result", result)
-                return { result }
-            } catch (error) {
-                console.error("[VAExpert] sendEmail encountered an error:", error)
-                return { error: "An unexpected error occurred while sending the email." }
-            }
+            return sendEmailUtil(email, transcriptLogs, "VAExpert");
         },
     },
 }

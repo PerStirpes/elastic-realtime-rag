@@ -11,6 +11,7 @@ export interface UseHandleServerEventParams {
     selectedAgentConfigSet: AgentConfig[] | null
     sendClientEvent: (eventObj: any, eventNameSuffix?: string) => void
     setSelectedAgentName: (name: string) => void
+    /** Legacy param - not used */
     shouldForceResponse?: boolean
 }
 
@@ -40,29 +41,44 @@ export function useHandleServerEvent({
             return
         }
         if (mostRecentAssistantMessage.status === "DONE") {
-            console.log("No truncation needed, message is DONE")
+            console.log("No cancellation needed, message is already DONE")
             return
         }
-        //todo repair
-        // sendClientEvent({
-        //     type: "conversation.item.truncate",
-        //     item_id: mostRecentAssistantMessage?.itemId,
-        //     content_index: 0,
-        //     audio_end_ms: Date.now() - mostRecentAssistantMessage.createdAtMs,
-        // })
-        sendClientEvent({ type: "response.cancel" }, "(cancel due to user interruption)")
+
+        try {
+            // Check if there are active audio buffers before attempting to cancel
+            if (outputAudioBuffersRef.current.length > 0) {
+                // First truncate the message content
+                sendClientEvent({
+                    type: "conversation.item.truncate",
+                    item_id: mostRecentAssistantMessage?.itemId,
+                    content_index: 0,
+                    audio_end_ms: Date.now() - mostRecentAssistantMessage.createdAtMs,
+                })
+
+                // Then cancel the response after a small delay to ensure proper sequence
+                setTimeout(() => {
+                    sendClientEvent({ type: "response.cancel" }, "(cancel due to user interruption)")
+                }, 50)
+            } else {
+                console.log("No active audio buffers to cancel")
+            }
+        } catch (error) {
+            console.warn("Error in cancelAssistantSpeech:", error)
+        }
     }
 
+    /**
+     * Process function calls from the AI
+     */
     const handleFunctionCall = async (functionCallParams: { name: string; call_id?: string; arguments: string }) => {
         let args: any
-        // 1. Attempt to parse the JSON arguments
+        // Parse the function arguments
         try {
             args = JSON.parse(functionCallParams.arguments)
-            addTranscriptBreadcrumb(`function call: ${functionCallParams.name}`, args)
+            addTranscriptBreadcrumb(`Function call: ${functionCallParams.name}`, args)
         } catch (parseError) {
-            // console.error("Error parsing JSON in functionCallParams.arguments:", parseError)
             console.error("JSON Parse Error:", parseError, "Raw JSON:", functionCallParams.arguments)
-
             addTranscriptBreadcrumb(`Error parsing arguments for function call: ${functionCallParams.name}`, {
                 error: parseError,
             })
@@ -77,15 +93,12 @@ export function useHandleServerEvent({
                     }),
                 },
             })
-            sendClientEvent({ type: "response.create" }) // maybe change to
-            return // Exit early since the input is invalid
+            sendClientEvent({ type: "response.create" })
+            return
         }
 
-        // 2. Wrap the rest of the processing in a try/catch block
         try {
             const currentAgent = selectedAgentConfigSet?.find((a) => a.name === selectedAgentName)
-            //todo
-            // addTranscriptBreadcrumb(`function call: ${functionCallParams.name}`, args)
 
             if (currentAgent?.toolLogic?.[functionCallParams.name]) {
                 // Execute the function associated with the agent
@@ -163,38 +176,44 @@ export function useHandleServerEvent({
         }
     }
 
+    /**
+     * Main server event handler
+     */
     const handleServerEvent = (serverEvent: ServerEvent) => {
+        // Log the event for debugging
         logServerEvent(serverEvent)
+
+        // Extract common fields used across multiple events
         let text = serverEvent.item?.content?.[0]?.text || serverEvent.item?.content?.[0]?.transcript || ""
         const role = serverEvent.item?.role as "user" | "assistant"
         const itemId = serverEvent.item?.id
+
+        // Process each event type
         switch (serverEvent.type) {
             case "session.created": {
+                // Session connection established
                 if (serverEvent.session?.id) {
                     setSessionStatus("CONNECTED")
                     addTranscriptBreadcrumb(
-                        `session.id: ${serverEvent.session.id}\nStarted at: ${new Date().toLocaleString()}`,
+                        `Session ID: ${serverEvent.session.id}\nStarted at: ${new Date().toLocaleString()}`,
                     )
                 }
                 break
             }
 
             case "conversation.item.created": {
-                // let text = serverEvent.item?.content?.[0]?.text || serverEvent.item?.content?.[0]?.transcript || ""
-                // const role = serverEvent.item?.role as "user" | "assistant"
-                // const itemId = serverEvent.item?.id
-
                 if (itemId && transcriptItems.some((item) => item.itemId === itemId)) {
                     break
                 }
 
+                // Add new message to transcript
                 if (itemId && role) {
                     if (role === "user") {
-                        // If the text is empty (e.g., during audio transcription), you can set a placeholder
+                        // For audio input, show placeholder until transcription completes
                         if (!text) {
                             text = "[Transcribing...]"
                         }
-                        // User message detected: cancel any ongoing audio response
+                        // Cancel any ongoing assistant response when user speaks
                         cancelAssistantSpeech()
                     }
                     addTranscriptMessage(itemId, role, text)
@@ -203,16 +222,19 @@ export function useHandleServerEvent({
             }
 
             case "conversation.item.truncated": {
+                // Message was interrupted/truncated by the user
                 const audioEndMs = serverEvent.audio_end_ms
-
-                addTranscriptBreadcrumb(`[Truncated at ${audioEndMs}],`)
-                cancelAssistantSpeech()
+                addTranscriptBreadcrumb(`[Truncated at ${audioEndMs}ms]`)
                 break
             }
+
             case "conversation.item.input_audio_transcription.completed": {
+                // Final transcription of user audio
                 const itemId = serverEvent.item_id
                 const finalTranscript =
                     !serverEvent.transcript || serverEvent.transcript === "\n" ? "[inaudible]" : serverEvent.transcript
+
+                // Replace placeholder with final transcript
                 if (itemId) {
                     updateTranscriptMessage(itemId, finalTranscript, false)
                 }
@@ -220,8 +242,11 @@ export function useHandleServerEvent({
             }
 
             case "response.audio_transcript.delta": {
+                // Incremental update to assistant text
                 const itemId = serverEvent.item_id
                 const deltaText = serverEvent.delta || ""
+
+                // Append new text to the current message
                 if (itemId) {
                     updateTranscriptMessage(itemId, deltaText, true)
                 }
@@ -229,7 +254,9 @@ export function useHandleServerEvent({
             }
 
             case "response.done": {
+                // AI has completed its response
                 if (serverEvent.response?.output) {
+                    // Process any function calls in the response
                     serverEvent.response.output.forEach((outputItem) => {
                         if (outputItem.type === "function_call" && outputItem.name && outputItem.arguments) {
                             handleFunctionCall({
@@ -243,23 +270,24 @@ export function useHandleServerEvent({
                 break
             }
 
-            // Handle creation of an output audio buffer.
             case "output_audio_buffer.started": {
-                // Assuming serverEvent carries a unique buffer ID in serverEvent.response_id.
+                // New audio buffer from assistant speech
                 if (serverEvent.response_id) {
-                    // Limit the size of the array to prevent memory leaks
+                    // Prevent memory leaks by limiting buffer tracking
                     if (outputAudioBuffersRef.current.length > 100) {
                         outputAudioBuffersRef.current = outputAudioBuffersRef.current.slice(-100)
                     }
+                    // Track this buffer
                     outputAudioBuffersRef.current.push(serverEvent.response_id)
                 }
                 break
             }
 
-            // Handle deletion of an output audio buffer.
             case "output_audio_buffer.stopped":
             case "output_audio_buffer.cleared": {
+                // Audio buffer finished or cleared
                 if (serverEvent.response_id) {
+                    // Remove from tracked buffers
                     outputAudioBuffersRef.current = outputAudioBuffersRef.current.filter(
                         (id) => id !== serverEvent.response_id,
                     )
@@ -268,6 +296,7 @@ export function useHandleServerEvent({
             }
 
             case "response.output_item.done": {
+                // Assistant message is complete
                 const itemId = serverEvent.item?.id
                 if (itemId) {
                     updateTranscriptItemStatus(itemId, "DONE")
