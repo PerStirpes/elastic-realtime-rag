@@ -5,9 +5,10 @@ import React, { useEffect, useRef } from "react"
 type AudioDancerComponentProps = {
     localStream: MediaStream | null
     remoteStream: MediaStream | null
+    isMobile?: boolean
 }
 
-export default function AudioDancerComponent({ localStream, remoteStream }: AudioDancerComponentProps) {
+export default function AudioDancerComponent({ localStream, remoteStream, isMobile = false }: AudioDancerComponentProps) {
     const svgRef = useRef<SVGSVGElement | null>(null)
     const containerRef = useRef<HTMLDivElement | null>(null)
 
@@ -67,7 +68,9 @@ export default function AudioDancerComponent({ localStream, remoteStream }: Audi
             bubblePaths.forEach((path, i) => {
                 const amplitude = dataArray[bandIndices[i]]
                 // Limit scale to avoid excessive scaling that might cause clipping
-                const scale = 1 + (amplitude / 255) * 0.4
+                // Use smaller scale factor for mobile to keep animations within bounds
+                const scaleFactor = isMobile ? 0.2 : 0.4;
+                const scale = 1 + (amplitude / 255) * scaleFactor
                 // Scale the path around its center
                 path.style.transform = `scale(${scale})`
                 path.style.transformOrigin = "center center"
@@ -102,17 +105,22 @@ export default function AudioDancerComponent({ localStream, remoteStream }: Audi
         }
     }, [])
 
+    // Define sizes based on mobile or desktop
+    const svgSize = isMobile ? 120 : 235;
+    const viewBoxPadding = isMobile ? 20 : 15;
+    const viewBoxSize = isMobile ? 205 : 235;
+    
     return (
         <div 
             ref={containerRef}
-            className="flex items-center justify-center h-full w-full md:w-auto py-4 md:py-0"
-            style={{ minWidth: "235px" }}
+            className="flex items-center justify-center h-full w-full"
+            style={{ minWidth: `${svgSize}px` }}
         >
             <svg 
                 ref={svgRef} 
-                width="235" 
-                height="235" 
-                viewBox="-15 -15 235 235" 
+                width={svgSize} 
+                height={svgSize} 
+                viewBox={`-${viewBoxPadding} -${viewBoxPadding} ${viewBoxSize} ${viewBoxSize}`}
                 fill="none" 
                 xmlns="http://www.w3.org/2000/svg"
                 style={{ overflow: 'visible', display: 'block' }}
