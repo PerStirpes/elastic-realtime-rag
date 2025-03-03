@@ -1,4 +1,4 @@
-import { AgentConfig, Tool, TranscriptItem } from "@/app/types"
+import { AgentConfig, Tool } from "@/app/types"
 
 /**
  * Shared Elasticsearch utility for fetching data from different endpoints
@@ -6,19 +6,19 @@ import { AgentConfig, Tool, TranscriptItem } from "@/app/types"
 export async function elasticSearchUtil(query: string, endpoint: string, agentName: string = "Agent") {
     try {
         console.log(`[${agentName}] Searching ${endpoint} for: ${query}`)
-        
+
         const response = await fetch(`/api/${endpoint}?q=${encodeURIComponent(query)}`, {
             method: "GET",
             headers: {
                 "Content-Type": "application/json",
             },
         })
-        
+
         if (!response.ok) {
             console.error(`Error from server when searching ${endpoint}:`, response)
             return { error: `Server error while searching ${endpoint} data.` }
         }
-        
+
         const completion = await response.json()
         return { result: completion }
     } catch (error) {
@@ -36,7 +36,7 @@ export async function elasticSearchUtil(query: string, endpoint: string, agentNa
 export async function sendEmailUtil(email: any, transcriptLogs: any, agentName: string = "Agent") {
     try {
         function extractTitleAndRole(
-            transcriptLogs: { role: string | undefined; title: string }[]
+            transcriptLogs: { role: string | undefined; title: string }[],
         ): { title: string; role: string }[] {
             return transcriptLogs
                 .filter(
@@ -44,17 +44,17 @@ export async function sendEmailUtil(email: any, transcriptLogs: any, agentName: 
                         role &&
                         (role === "user" || role === "assistant") &&
                         !/^hi\b|^hello\b/i.test(title) &&
-                        !/\[inaudible\]/i.test(title)
+                        !/\[inaudible\]/i.test(title),
                 )
                 .map(({ title, role }) => ({ title, role: role as string }))
         }
-        
+
         const filteredTitles = extractTitleAndRole(
-            transcriptLogs.filter((log: any) => log.role !== undefined) as { role: string; title: string }[]
+            transcriptLogs.filter((log: any) => log.role !== undefined) as { role: string; title: string }[],
         )
-        
+
         console.log("filteredTitles", filteredTitles)
-        
+
         const response = await fetch(`/api/sendEmail`, {
             method: "POST",
             headers: {
@@ -67,7 +67,7 @@ export async function sendEmailUtil(email: any, transcriptLogs: any, agentName: 
             console.error("Error from server:", response)
             return { error: "Server error while sending email." }
         }
-        
+
         const result = await response.json()
         console.log("result", result)
         return { result }
