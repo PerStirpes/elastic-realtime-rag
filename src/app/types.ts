@@ -59,6 +59,15 @@ export interface Log {
     type: string
 }
 
+/**
+ * Parameters for function calls from the AI to the application
+ */
+export interface FunctionCallParams {
+    name: string
+    call_id?: string
+    arguments: string
+}
+
 export interface ServerEvent {
     type: string
     event_id?: string
@@ -104,4 +113,24 @@ export interface LoggedEvent {
     timestamp: string
     eventName: string
     eventData: Record<string, any> // can have arbitrary objects logged
+}
+
+/**
+ * Props for the useRealtimeConnection hook
+ */
+export interface UseRealtimeConnectionProps {
+    selectedAgentName: string
+    setSelectedAgentName: (name: string) => void
+    selectedAgentConfigSet: AgentConfig[] | null
+}
+
+/**
+ * Props for the useHandleServerEvent hook
+ */
+export interface UseHandleServerEventParams {
+    setSessionStatus: (status: SessionStatus) => void
+    selectedAgentName: string
+    selectedAgentConfigSet: AgentConfig[] | null
+    sendClientEvent: (eventObj: any, eventNameSuffix?: string) => void
+    setSelectedAgentName: (name: string) => void
 }

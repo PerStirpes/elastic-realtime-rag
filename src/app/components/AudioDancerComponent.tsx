@@ -5,10 +5,12 @@ import React, { useEffect, useRef } from "react"
 type AudioDancerComponentProps = {
     localStream: MediaStream | null
     remoteStream: MediaStream | null
+    isMobile?: boolean
 }
 
-export default function AudioDancerComponent({ localStream, remoteStream }: AudioDancerComponentProps) {
+export default function AudioDancerComponent({ localStream, remoteStream, isMobile = false }: AudioDancerComponentProps) {
     const svgRef = useRef<SVGSVGElement | null>(null)
+    const containerRef = useRef<HTMLDivElement | null>(null)
 
     // Use a ref to store AudioContext to prevent recreation on each render
     const audioContextRef = useRef<AudioContext | null>(null)
@@ -65,11 +67,17 @@ export default function AudioDancerComponent({ localStream, remoteStream }: Audi
             analyser.getByteFrequencyData(dataArray)
             bubblePaths.forEach((path, i) => {
                 const amplitude = dataArray[bandIndices[i]]
-                const scale = 1 + (amplitude / 255) * 0.5
+                // Limit scale to avoid excessive scaling that might cause clipping
+                // Use smaller scale factor for mobile to keep animations within bounds
+                const scaleFactor = isMobile ? 0.2 : 0.4;
+                const scale = 1 + (amplitude / 255) * scaleFactor
                 // Scale the path around its center
                 path.style.transform = `scale(${scale})`
                 path.style.transformOrigin = "center center"
                 path.style.transformBox = "fill-box"
+                // Ensure paths don't get clipped during animation
+                path.style.overflow = "visible"
+                path.style.display = "block"
             })
         }
         frameId = requestAnimationFrame(animate)
@@ -97,9 +105,27 @@ export default function AudioDancerComponent({ localStream, remoteStream }: Audi
         }
     }, [])
 
+    // Define sizes based on mobile or desktop
+    const svgSize = isMobile ? 120 : 235;
+    const viewBoxPadding = isMobile ? 20 : 15;
+    const viewBoxSize = isMobile ? 205 : 235;
+    
     return (
-        <svg ref={svgRef} width="205" height="204" viewBox="0 0 205 204" fill="none" xmlns="http://www.w3.org/2000/svg">
-            {/* Elastic logo SVG paths (each path is a bubble) */}
+        <div 
+            ref={containerRef}
+            className="flex items-center justify-center h-full w-full"
+            style={{ minWidth: `${svgSize}px` }}
+        >
+            <svg 
+                ref={svgRef} 
+                width={svgSize} 
+                height={svgSize} 
+                viewBox={`-${viewBoxPadding} -${viewBoxPadding} ${viewBoxSize} ${viewBoxSize}`}
+                fill="none" 
+                xmlns="http://www.w3.org/2000/svg"
+                style={{ overflow: 'visible', display: 'block' }}
+            >
+                {/* Elastic logo SVG paths (each path is a bubble) */}
             <path
                 d="M204.58 106.744C204.603 98.4365 202.056 90.3256 197.289 83.5226C192.521 76.7196 185.766 71.5575 177.95 68.7437C178.661 65.1202 179.02 61.4363 179.02 57.7437C179.015 45.5282 175.137 33.6288 167.945 23.7553C160.752 13.8817 150.615 6.54212 138.99 2.79108C127.365 -0.95996 114.849 -0.929399 103.242 2.87837C91.6356 6.68615 81.5344 14.0751 74.3903 23.9837C69.1179 19.9113 62.6636 17.6651 56.0021 17.5844C49.3406 17.5036 42.8337 19.5926 37.4641 23.536C32.0946 27.4793 28.1539 33.0628 26.2374 39.4431C24.3208 45.8235 24.5325 52.6542 26.8403 58.9037C19.0148 61.7531 12.2486 66.929 7.45072 73.7362C2.6528 80.5433 0.0529206 88.6558 0.000313645 96.9837C-0.0326102 105.33 2.52727 113.48 7.32627 120.309C12.1253 127.138 18.9265 132.307 26.7903 135.104C25.1677 143.453 25.4123 152.057 27.5064 160.301C29.6005 168.544 33.4924 176.222 38.903 182.784C44.3136 189.347 51.1089 194.631 58.8019 198.258C66.495 201.885 74.8951 203.765 83.4003 203.764C92.5559 203.772 101.581 201.59 109.722 197.402C117.863 193.213 124.884 187.138 130.2 179.684C135.455 183.802 141.912 186.091 148.588 186.201C155.264 186.312 161.793 184.238 167.181 180.295C172.569 176.353 176.522 170.758 178.437 164.362C180.352 157.965 180.125 151.119 177.79 144.864C185.623 142.013 192.394 136.832 197.193 130.016C201.992 123.201 204.587 115.079 204.63 106.744"
                 fill="white"
@@ -129,5 +155,6 @@ export default function AudioDancerComponent({ localStream, remoteStream }: Audi
                 fill="#0B64DD"
             />
         </svg>
+        </div>
     )
 }

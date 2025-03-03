@@ -1,4 +1,5 @@
 import { AgentConfig } from "@/app/types"
+import { sendEmailUtil, elasticSearchUtil } from "../utils"
 
 const medicareAgent: AgentConfig = {
     name: "Medicare Expert",
@@ -92,27 +93,7 @@ const medicareAgent: AgentConfig = {
     ],
     toolLogic: {
         searchMedicare: async ({ query }: { query: string }) => {
-            try {
-                const response = await fetch(`/api/medicare?q=${encodeURIComponent(query)}`, {
-                    method: "GET",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                })
-                if (!response.ok) {
-                    console.error("Error from server:", response)
-                    return { error: "Server error while searching Medicare data." }
-                }
-                const completion = await response.json()
-
-                return { result: completion }
-            } catch (error) {
-                console.error("[MedicareExpert] searchMedicare encountered an error:", error)
-                return {
-                    error: "An unexpected error occurred while searching medicare data.",
-                    blogs: [],
-                }
-            }
+            return elasticSearchUtil(query, "medicare", "MedicareExpert");
         },
         summarizeContent: async (args, transcriptLogs) => {
             console.log("summarizeContent", args)
@@ -127,43 +108,7 @@ const medicareAgent: AgentConfig = {
   `
         },
         sendEmail: async (email, transcriptLogs) => {
-            try {
-                function extractTitleAndRole(
-                    transcriptLogs: { role: string | undefined; title: string }[],
-                ): { title: string; role: string }[] {
-                    return transcriptLogs
-                        .filter(
-                            ({ role, title }) =>
-                                role &&
-                                (role === "user" || role === "assistant") &&
-                                !/^hi\b|^hello\b/i.test(title) &&
-                                !/\[inaudible\]/i.test(title),
-                        )
-                        .map(({ title, role }) => ({ title, role: role as string }))
-                }
-                const filteredTitles = extractTitleAndRole(
-                    transcriptLogs.filter((log) => log.role !== undefined) as { role: string; title: string }[],
-                )
-                console.log("filteredTitles", filteredTitles)
-                const response = await fetch(`/api/sendEmail`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({ email: email, message: filteredTitles }),
-                })
-
-                if (!response.ok) {
-                    console.error("Error from server:", response)
-                    return { error: "Server error while sending email." }
-                }
-                const result = await response.json()
-                console.log("result", result)
-                return { result }
-            } catch (error) {
-                console.error("[MedicareExpert] sendEmail encountered an error:", error)
-                return { error: "An unexpected error occurred while sending the email." }
-            }
+            return sendEmailUtil(email, transcriptLogs, "MedicareExpert");
         },
     },
 }
