@@ -313,13 +313,25 @@ export function useRealtimeConnection({
       return;
     }
 
-    sendClientEvent({
-      type: "conversation.item.truncate",
-      item_id: mostRecentAssistantMessage?.itemId,
-      content_index: 0,
-      audio_end_ms: Date.now() - mostRecentAssistantMessage.createdAtMs,
-    });
-    sendClientEvent({ type: "response.cancel" }, "(cancel due to user interruption)");
+    try {
+      sendClientEvent({
+        type: "conversation.item.truncate",
+        item_id: mostRecentAssistantMessage?.itemId,
+        content_index: 0,
+        audio_end_ms: Date.now() - mostRecentAssistantMessage.createdAtMs,
+      });
+      
+      // Add a small delay before cancelling the response to ensure proper sequence
+      setTimeout(() => {
+        try {
+          sendClientEvent({ type: "response.cancel" }, "(cancel due to user interruption)");
+        } catch (error) {
+          console.warn("Error in delayed response.cancel:", error);
+        }
+      }, 50);
+    } catch (error) {
+      console.warn("Error in cancelAssistantSpeech:", error);
+    }
   };
 
   // Push-to-talk handlers

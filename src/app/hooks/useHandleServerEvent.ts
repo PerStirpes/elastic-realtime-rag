@@ -14,7 +14,6 @@ export interface UseHandleServerEventParams {
     shouldForceResponse?: boolean
 }
 
-//todo clean up event handlding
 export function useHandleServerEvent({
     setSessionStatus,
     selectedAgentName,
@@ -44,14 +43,17 @@ export function useHandleServerEvent({
             console.log("No truncation needed, message is DONE")
             return
         }
-        //todo repair
-        // sendClientEvent({
-        //     type: "conversation.item.truncate",
-        //     item_id: mostRecentAssistantMessage?.itemId,
-        //     content_index: 0,
-        //     audio_end_ms: Date.now() - mostRecentAssistantMessage.createdAtMs,
-        // })
-        sendClientEvent({ type: "response.cancel" }, "(cancel due to user interruption)")
+        
+        try {
+            // Only attempt to cancel if there's an in-progress message
+            if (outputAudioBuffersRef.current.length > 0) {
+                sendClientEvent({ type: "response.cancel" }, "(cancel due to user interruption)")
+            } else {
+                console.log("No active audio buffers to cancel")
+            }
+        } catch (error) {
+            console.warn("Error in cancelAssistantSpeech:", error)
+        }
     }
 
     const handleFunctionCall = async (functionCallParams: { name: string; call_id?: string; arguments: string }) => {
@@ -241,6 +243,8 @@ export function useHandleServerEvent({
                         }
                     })
                 }
+                // Don't attempt to cancel here - the response is already done 
+                // which is likely causing the "Cancellation failed: no active response found" error
                 break
             }
 
@@ -272,7 +276,8 @@ export function useHandleServerEvent({
                 const itemId = serverEvent.item?.id
                 if (itemId) {
                     updateTranscriptItemStatus(itemId, "DONE")
-                    cancelAssistantSpeech()
+                    // Don't call cancelAssistantSpeech here since the message is already done
+                    // This prevents the "Cancellation failed: no active response found" error
                 }
                 break
             }
