@@ -1,16 +1,10 @@
 import { useRef, useState, useEffect } from "react"
 import { v4 as uuidv4 } from "uuid"
-import { SessionStatus, AgentConfig } from "@/app/types"
+import { SessionStatus, UseRealtimeConnectionProps } from "@/app/types"
 import { createRealtimeConnection } from "@/app/lib/realtimeConnection"
 import { useTranscript } from "@/app/contexts/TranscriptContext"
 import { useEvent } from "@/app/contexts/EventContext"
 import { useHandleServerEvent } from "./useHandleServerEvent"
-
-interface UseRealtimeConnectionProps {
-    selectedAgentName: string
-    setSelectedAgentName: (name: string) => void
-    selectedAgentConfigSet: AgentConfig[] | null
-}
 
 export function useRealtimeConnection({
     selectedAgentName,

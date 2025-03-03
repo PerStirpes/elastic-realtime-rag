@@ -1,20 +1,26 @@
 "use client"
 
-import { ServerEvent, SessionStatus, AgentConfig } from "@/app/types"
+import { 
+    ServerEvent, 
+    FunctionCallParams,
+    UseHandleServerEventParams,
+    TranscriptItem
+} from "@/app/types"
 import { useTranscript } from "@/app/contexts/TranscriptContext"
 import { useEvent } from "@/app/contexts/EventContext"
 import { useRef } from "react"
 
-export interface UseHandleServerEventParams {
-    setSessionStatus: (status: SessionStatus) => void
-    selectedAgentName: string
-    selectedAgentConfigSet: AgentConfig[] | null
-    sendClientEvent: (eventObj: any, eventNameSuffix?: string) => void
-    setSelectedAgentName: (name: string) => void
-    /** Legacy param - not used */
-    shouldForceResponse?: boolean
-}
-
+/**
+ * Custom hook to handle server events from the WebRTC data channel
+ * 
+ * This hook processes various event types including:
+ * - Session management events
+ * - Conversation message events
+ * - Audio buffer management
+ * - Function/tool calls from the AI
+ * 
+ * @returns A ref to the event handler function that maintains reference stability
+ */
 export function useHandleServerEvent({
     setSessionStatus,
     selectedAgentName,
@@ -22,6 +28,7 @@ export function useHandleServerEvent({
     sendClientEvent,
     setSelectedAgentName,
 }: UseHandleServerEventParams) {
+    // Access to transcript state and methods
     const {
         transcriptItems,
         addTranscriptBreadcrumb,
@@ -30,35 +37,51 @@ export function useHandleServerEvent({
         updateTranscriptItemStatus,
     } = useTranscript()
 
+    // Access to event logging
     const { logServerEvent } = useEvent()
 
+    // Ref to track active audio buffers
     const outputAudioBuffersRef = useRef<string[]>([])
 
+    /**
+     * Cancel ongoing assistant speech
+     * 
+     * This is used when a user interrupts the AI with new input
+     */
     const cancelAssistantSpeech = async () => {
-        const mostRecentAssistantMessage = [...transcriptItems].reverse().find((item) => item.role === "assistant")
+        // Find the most recent assistant message
+        const mostRecentAssistantMessage = [...transcriptItems].reverse().find(
+            item => item.role === "assistant"
+        )
+        
+        // Early return if no message or already complete
         if (!mostRecentAssistantMessage) {
-            console.warn("can't cancel, no recent assistant message found")
+            console.warn("Can't cancel: no recent assistant message found")
             return
         }
+        
         if (mostRecentAssistantMessage.status === "DONE") {
-            console.log("No cancellation needed, message is already DONE")
+            console.log("No cancellation needed: message already complete")
             return
         }
 
         try {
-            // Check if there are active audio buffers before attempting to cancel
+            // Only attempt to cancel if there are active audio buffers
             if (outputAudioBuffersRef.current.length > 0) {
-                // First truncate the message content
+                // Step 1: Truncate the message content
                 sendClientEvent({
                     type: "conversation.item.truncate",
-                    item_id: mostRecentAssistantMessage?.itemId,
+                    item_id: mostRecentAssistantMessage.itemId,
                     content_index: 0,
                     audio_end_ms: Date.now() - mostRecentAssistantMessage.createdAtMs,
                 })
 
-                // Then cancel the response after a small delay to ensure proper sequence
+                // Step 2: Cancel the response (after a short delay to ensure proper sequencing)
                 setTimeout(() => {
-                    sendClientEvent({ type: "response.cancel" }, "(cancel due to user interruption)")
+                    sendClientEvent(
+                        { type: "response.cancel" }, 
+                        "(cancel due to user interruption)"
+                    )
                 }, 50)
             } else {
                 console.log("No active audio buffers to cancel")
@@ -69,246 +92,355 @@ export function useHandleServerEvent({
     }
 
     /**
+     * Handle tool execution error
+     */
+    const handleFunctionError = (error: any, callId?: string, name?: string) => {
+        console.error("Function call error:", error)
+        
+        addTranscriptBreadcrumb(`Error during function call: ${name}`, { error })
+        
+        sendClientEvent({
+            type: "conversation.item.create",
+            item: {
+                type: "function_call_error",
+                call_id: callId,
+                output: JSON.stringify({
+                    error: "Function call failed",
+                    details: (error as Error).message,
+                }),
+            },
+        })
+        
+        sendClientEvent({ type: "response.create" })
+    }
+
+    /**
+     * Process standard agent tool calls
+     */
+    const executeAgentTool = async (
+        fn: (args: any, transcriptLogsFiltered: TranscriptItem[]) => Promise<any> | any, 
+        args: any, 
+        name: string, 
+        callId?: string
+    ) => {
+        try {
+            // Execute the function and get result
+            const result = await fn(args, transcriptItems)
+            
+            // Log the result to transcript
+            addTranscriptBreadcrumb(`Function result: ${name}`, result)
+            
+            // Send result back to AI
+            sendClientEvent({
+                type: "conversation.item.create",
+                item: {
+                    type: "function_call_output",
+                    call_id: callId,
+                    output: JSON.stringify(result),
+                },
+            })
+            
+            // Trigger AI to continue processing
+            sendClientEvent({ type: "response.create" })
+        } catch (error) {
+            handleFunctionError(error, callId, name)
+        }
+    }
+
+    /**
+     * Handle agent transfer requests
+     */
+    const handleAgentTransfer = (args: any, callId?: string) => {
+        const destinationAgent = args.destination_agent
+        
+        // Find the requested agent config
+        const newAgentConfig = selectedAgentConfigSet?.find(
+            a => a.name === destinationAgent
+        ) || null
+
+        // Perform the transfer if agent exists
+        const transferSuccessful = !!newAgentConfig
+        if (transferSuccessful) {
+            console.log(`Transferring to agent: ${destinationAgent}`)
+            setSelectedAgentName(destinationAgent)
+        } else {
+            console.error(`Transfer failed - agent not found: ${destinationAgent}`)
+        }
+
+        // Prepare response data
+        const transferResult = {
+            destination_agent: destinationAgent,
+            did_transfer: transferSuccessful,
+        }
+
+        // Log the transfer result
+        addTranscriptBreadcrumb(`Transfer to ${destinationAgent}`, transferResult)
+        
+        // Send result back to AI
+        sendClientEvent({
+            type: "conversation.item.create",
+            item: {
+                type: "function_call_output",
+                call_id: callId,
+                output: JSON.stringify(transferResult),
+            },
+        })
+    }
+
+    /**
      * Process function calls from the AI
      */
-    const handleFunctionCall = async (functionCallParams: { name: string; call_id?: string; arguments: string }) => {
+    const handleFunctionCall = async (params: FunctionCallParams) => {
+        const { name, call_id, arguments: argsString } = params
         let args: any
-        // Parse the function arguments
+        
+        // Step 1: Parse the function arguments
         try {
-            args = JSON.parse(functionCallParams.arguments)
-            addTranscriptBreadcrumb(`Function call: ${functionCallParams.name}`, args)
+            args = JSON.parse(argsString)
+            addTranscriptBreadcrumb(`Function call: ${name}`, args)
         } catch (parseError) {
-            console.error("JSON Parse Error:", parseError, "Raw JSON:", functionCallParams.arguments)
-            addTranscriptBreadcrumb(`Error parsing arguments for function call: ${functionCallParams.name}`, {
+            // Handle JSON parsing errors
+            console.error("JSON Parse Error:", parseError, "Raw JSON:", argsString)
+            
+            addTranscriptBreadcrumb(`Error parsing arguments for function: ${name}`, {
                 error: parseError,
             })
+            
             sendClientEvent({
                 type: "conversation.item.create",
                 item: {
                     type: "function_call_error",
-                    call_id: functionCallParams.call_id,
+                    call_id,
                     output: JSON.stringify({
                         error: "Invalid JSON provided",
                         details: (parseError as Error).message,
                     }),
                 },
             })
+            
             sendClientEvent({ type: "response.create" })
             return
         }
 
+        // Step 2: Execute the appropriate function
         try {
-            const currentAgent = selectedAgentConfigSet?.find((a) => a.name === selectedAgentName)
+            const currentAgent = selectedAgentConfigSet?.find(a => a.name === selectedAgentName)
 
-            if (currentAgent?.toolLogic?.[functionCallParams.name]) {
-                // Execute the function associated with the agent
-                const fn = currentAgent.toolLogic[functionCallParams.name]
-                const fnResult = await fn(args, transcriptItems)
-
-                addTranscriptBreadcrumb(`function call result: ${functionCallParams.name}`, fnResult)
-
-                sendClientEvent({
-                    type: "conversation.item.create",
-                    item: {
-                        type: "function_call_output",
-                        call_id: functionCallParams.call_id,
-                        output: JSON.stringify(fnResult),
-                    },
-                })
-                sendClientEvent({ type: "response.create" })
-            } else if (functionCallParams.name === "transferAgents") {
-                // Handle the transferAgents function call
-                const destinationAgent = args.destination_agent
-                const newAgentConfig = selectedAgentConfigSet?.find((a) => a.name === destinationAgent) || null
-
-                if (newAgentConfig) {
-                    console.log(`Transferring to agent: ${destinationAgent}`)
-                    setSelectedAgentName(destinationAgent)
-                } else {
-                    console.error(`Failed to transfer - agent not found: ${destinationAgent}`)
-                }
-
-                const functionCallOutput = {
-                    destination_agent: destinationAgent,
-                    did_transfer: !!newAgentConfig,
-                }
-
-                sendClientEvent({
-                    type: "conversation.item.create",
-                    item: {
-                        type: "function_call_output",
-                        call_id: functionCallParams.call_id,
-                        output: JSON.stringify(functionCallOutput),
-                    },
-                })
-                addTranscriptBreadcrumb(`function call: ${functionCallParams.name} response`, functionCallOutput)
+            if (currentAgent?.toolLogic?.[name]) {
+                // Execute agent-specific tool
+                const fn = currentAgent.toolLogic[name]
+                await executeAgentTool(fn, args, name, call_id)
+            } else if (name === "transferAgents") {
+                // Handle agent transfer requests
+                handleAgentTransfer(args, call_id)
             } else {
-                // Fallback behavior if no specific function logic exists
+                // Fallback for unknown functions
+                console.warn(`Unknown function called: ${name}`)
+                
                 const simulatedResult = { result: true }
-                addTranscriptBreadcrumb(`function call fallback: ${functionCallParams.name}`, simulatedResult)
-
+                addTranscriptBreadcrumb(`Function fallback: ${name}`, simulatedResult)
+                
                 sendClientEvent({
                     type: "conversation.item.create",
                     item: {
                         type: "function_call_output",
-                        call_id: functionCallParams.call_id,
+                        call_id,
                         output: JSON.stringify(simulatedResult),
                     },
                 })
+                
                 sendClientEvent({ type: "response.create" })
             }
         } catch (error) {
-            // General error handling for any errors that occur during function execution
-            console.error("Error handling function call:", error)
-            addTranscriptBreadcrumb(`Error during function call: ${functionCallParams.name}`, { error })
-            sendClientEvent({
-                type: "conversation.item.create",
-                item: {
-                    type: "function_call_error",
-                    call_id: functionCallParams.call_id,
-                    output: JSON.stringify({
-                        error: "Function call failed",
-                        details: (error as Error).message,
-                    }),
-                },
-            })
-            sendClientEvent({ type: "response.create" })
+            // Handle any other execution errors
+            handleFunctionError(error, call_id, name)
         }
     }
 
     /**
-     * Main server event handler
+     * Handle session management events
      */
-    const handleServerEvent = (serverEvent: ServerEvent) => {
-        // Log the event for debugging
-        logServerEvent(serverEvent)
+    const handleSessionEvent = (event: ServerEvent) => {
+        if (event.session?.id) {
+            setSessionStatus("CONNECTED")
+            addTranscriptBreadcrumb(
+                `Session ID: ${event.session.id}\nStarted at: ${new Date().toLocaleString()}`
+            )
+        }
+    }
+
+    /**
+     * Handle conversation message creation
+     */
+    const handleMessageCreation = (
+        itemId: string | undefined, 
+        role: "user" | "assistant" | undefined, 
+        text: string
+    ) => {
+        // Skip if already in transcript
+        if (itemId && transcriptItems.some(item => item.itemId === itemId)) {
+            return
+        }
+
+        // Add the message to transcript
+        if (itemId && role) {
+            // For user audio input, show placeholder until transcription completes
+            const displayText = text || (role === "user" ? "[Transcribing...]" : "")
+            
+            // Cancel any ongoing assistant response when user speaks
+            if (role === "user") {
+                cancelAssistantSpeech()
+            }
+            
+            // Add to transcript
+            addTranscriptMessage(itemId, role, displayText)
+        }
+    }
+
+    /**
+     * Process audio transcription events
+     */
+    const handleTranscriptionCompleted = (event: ServerEvent) => {
+        const itemId = event.item_id
+        
+        if (!itemId) return
+        
+        // Format final transcript, handling empty or newline-only input
+        const finalTranscript = !event.transcript || event.transcript === "\n" 
+            ? "[inaudible]" 
+            : event.transcript
+
+        // Replace placeholder with final transcript (false = replace, not append)
+        updateTranscriptMessage(itemId, finalTranscript, false)
+    }
+
+    /**
+     * Process incremental text updates
+     */
+    const handleTextDelta = (event: ServerEvent) => {
+        const itemId = event.item_id
+        const deltaText = event.delta || ""
+        
+        if (itemId) {
+            // Append new text to the message (true = append)
+            updateTranscriptMessage(itemId, deltaText, true)
+        }
+    }
+
+    /**
+     * Process function calls in AI response
+     */
+    const handleResponseDone = (event: ServerEvent) => {
+        if (!event.response?.output) return
+        
+        // Process each function call in the response
+        event.response.output.forEach(outputItem => {
+            if (outputItem.type === "function_call" && 
+                outputItem.name && 
+                outputItem.arguments) {
+                
+                handleFunctionCall({
+                    name: outputItem.name,
+                    call_id: outputItem.call_id,
+                    arguments: outputItem.arguments,
+                })
+            }
+        })
+    }
+
+    /**
+     * Track new audio buffers
+     */
+    const handleAudioBufferStarted = (event: ServerEvent) => {
+        if (!event.response_id) return
+        
+        // Limit buffer tracking to prevent memory leaks
+        if (outputAudioBuffersRef.current.length > 100) {
+            outputAudioBuffersRef.current = outputAudioBuffersRef.current.slice(-100)
+        }
+        
+        // Add new buffer to tracking list
+        outputAudioBuffersRef.current.push(event.response_id)
+    }
+
+    /**
+     * Remove completed audio buffers
+     */
+    const handleAudioBufferEnded = (event: ServerEvent) => {
+        if (!event.response_id) return
+        
+        // Remove the buffer from tracking list
+        outputAudioBuffersRef.current = outputAudioBuffersRef.current.filter(
+            id => id !== event.response_id
+        )
+    }
+
+    /**
+     * Mark message as complete
+     */
+    const handleOutputItemDone = (event: ServerEvent) => {
+        const itemId = event.item?.id
+        
+        if (itemId) {
+            updateTranscriptItemStatus(itemId, "DONE")
+        }
+    }
+
+    /**
+     * Main server event handler - routes events to appropriate handlers
+     */
+    const handleServerEvent = (event: ServerEvent) => {
+        // Log all server events
+        logServerEvent(event)
 
         // Extract common fields used across multiple events
-        let text = serverEvent.item?.content?.[0]?.text || serverEvent.item?.content?.[0]?.transcript || ""
-        const role = serverEvent.item?.role as "user" | "assistant"
-        const itemId = serverEvent.item?.id
+        const text = event.item?.content?.[0]?.text || event.item?.content?.[0]?.transcript || ""
+        const role = event.item?.role as "user" | "assistant"
+        const itemId = event.item?.id
 
-        // Process each event type
-        switch (serverEvent.type) {
-            case "session.created": {
-                // Session connection established
-                if (serverEvent.session?.id) {
-                    setSessionStatus("CONNECTED")
-                    addTranscriptBreadcrumb(
-                        `Session ID: ${serverEvent.session.id}\nStarted at: ${new Date().toLocaleString()}`,
-                    )
-                }
+        // Route event to the appropriate handler
+        switch (event.type) {
+            case "session.created":
+                handleSessionEvent(event)
                 break
-            }
 
-            case "conversation.item.created": {
-                if (itemId && transcriptItems.some((item) => item.itemId === itemId)) {
-                    break
-                }
-
-                // Add new message to transcript
-                if (itemId && role) {
-                    if (role === "user") {
-                        // For audio input, show placeholder until transcription completes
-                        if (!text) {
-                            text = "[Transcribing...]"
-                        }
-                        // Cancel any ongoing assistant response when user speaks
-                        cancelAssistantSpeech()
-                    }
-                    addTranscriptMessage(itemId, role, text)
-                }
+            case "conversation.item.created":
+                handleMessageCreation(itemId, role, text)
                 break
-            }
 
-            case "conversation.item.truncated": {
-                // Message was interrupted/truncated by the user
-                const audioEndMs = serverEvent.audio_end_ms
-                addTranscriptBreadcrumb(`[Truncated at ${audioEndMs}ms]`)
+            case "conversation.item.truncated":
+                // Log truncation events
+                addTranscriptBreadcrumb(`[Truncated at ${event.audio_end_ms}ms]`)
                 break
-            }
 
-            case "conversation.item.input_audio_transcription.completed": {
-                // Final transcription of user audio
-                const itemId = serverEvent.item_id
-                const finalTranscript =
-                    !serverEvent.transcript || serverEvent.transcript === "\n" ? "[inaudible]" : serverEvent.transcript
-
-                // Replace placeholder with final transcript
-                if (itemId) {
-                    updateTranscriptMessage(itemId, finalTranscript, false)
-                }
+            case "conversation.item.input_audio_transcription.completed":
+                handleTranscriptionCompleted(event)
                 break
-            }
 
-            case "response.audio_transcript.delta": {
-                // Incremental update to assistant text
-                const itemId = serverEvent.item_id
-                const deltaText = serverEvent.delta || ""
-
-                // Append new text to the current message
-                if (itemId) {
-                    updateTranscriptMessage(itemId, deltaText, true)
-                }
+            case "response.audio_transcript.delta":
+                handleTextDelta(event)
                 break
-            }
 
-            case "response.done": {
-                // AI has completed its response
-                if (serverEvent.response?.output) {
-                    // Process any function calls in the response
-                    serverEvent.response.output.forEach((outputItem) => {
-                        if (outputItem.type === "function_call" && outputItem.name && outputItem.arguments) {
-                            handleFunctionCall({
-                                name: outputItem.name,
-                                call_id: outputItem.call_id,
-                                arguments: outputItem.arguments,
-                            })
-                        }
-                    })
-                }
+            case "response.done":
+                handleResponseDone(event)
                 break
-            }
 
-            case "output_audio_buffer.started": {
-                // New audio buffer from assistant speech
-                if (serverEvent.response_id) {
-                    // Prevent memory leaks by limiting buffer tracking
-                    if (outputAudioBuffersRef.current.length > 100) {
-                        outputAudioBuffersRef.current = outputAudioBuffersRef.current.slice(-100)
-                    }
-                    // Track this buffer
-                    outputAudioBuffersRef.current.push(serverEvent.response_id)
-                }
+            case "output_audio_buffer.started":
+                handleAudioBufferStarted(event)
                 break
-            }
 
             case "output_audio_buffer.stopped":
-            case "output_audio_buffer.cleared": {
-                // Audio buffer finished or cleared
-                if (serverEvent.response_id) {
-                    // Remove from tracked buffers
-                    outputAudioBuffersRef.current = outputAudioBuffersRef.current.filter(
-                        (id) => id !== serverEvent.response_id,
-                    )
-                }
+            case "output_audio_buffer.cleared":
+                handleAudioBufferEnded(event)
                 break
-            }
 
-            case "response.output_item.done": {
-                // Assistant message is complete
-                const itemId = serverEvent.item?.id
-                if (itemId) {
-                    updateTranscriptItemStatus(itemId, "DONE")
-                }
-                break
-            }
-
-            default:
+            case "response.output_item.done":
+                handleOutputItemDone(event)
                 break
         }
     }
 
+    // Maintain a stable reference to the handler function
     const handleServerEventRef = useRef(handleServerEvent)
     handleServerEventRef.current = handleServerEvent
 
