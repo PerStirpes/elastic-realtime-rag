@@ -1,24 +1,27 @@
 "use client"
 
-import { 
-    ServerEvent, 
-    FunctionCallParams,
-    UseHandleServerEventParams,
-    TranscriptItem
-} from "@/app/types"
+import { ServerEvent, FunctionCallParams, UseHandleServerEventParams, TranscriptItem } from "@/app/types"
 import { useTranscript } from "@/app/contexts/TranscriptContext"
 import { useEvent } from "@/app/contexts/EventContext"
 import { useRef } from "react"
+import {
+    recordServerEvent,
+    recordTokenUsage,
+    recordToolCall,
+    recordResponseDoneDetails,
+    recordFullTranscript,
+    recordUserTranscript,
+} from "@/app/lib/client-telemetry"
 
 /**
  * Custom hook to handle server events from the WebRTC data channel
- * 
+ *
  * This hook processes various event types including:
  * - Session management events
  * - Conversation message events
  * - Audio buffer management
  * - Function/tool calls from the AI
- * 
+ *
  * @returns A ref to the event handler function that maintains reference stability
  */
 export function useHandleServerEvent({
@@ -45,21 +48,19 @@ export function useHandleServerEvent({
 
     /**
      * Cancel ongoing assistant speech
-     * 
+     *
      * This is used when a user interrupts the AI with new input
      */
     const cancelAssistantSpeech = async () => {
         // Find the most recent assistant message
-        const mostRecentAssistantMessage = [...transcriptItems].reverse().find(
-            item => item.role === "assistant"
-        )
-        
+        const mostRecentAssistantMessage = [...transcriptItems].reverse().find((item) => item.role === "assistant")
+
         // Early return if no message or already complete
         if (!mostRecentAssistantMessage) {
             console.warn("Can't cancel: no recent assistant message found")
             return
         }
-        
+
         if (mostRecentAssistantMessage.status === "DONE") {
             console.log("No cancellation needed: message already complete")
             return
@@ -78,10 +79,7 @@ export function useHandleServerEvent({
 
                 // Step 2: Cancel the response (after a short delay to ensure proper sequencing)
                 setTimeout(() => {
-                    sendClientEvent(
-                        { type: "response.cancel" }, 
-                        "(cancel due to user interruption)"
-                    )
+                    sendClientEvent({ type: "response.cancel" }, "(cancel due to user interruption)")
                 }, 50)
             } else {
                 console.log("No active audio buffers to cancel")
@@ -96,9 +94,14 @@ export function useHandleServerEvent({
      */
     const handleFunctionError = (error: any, callId?: string, name?: string) => {
         console.error("Function call error:", error)
-        
+
         addTranscriptBreadcrumb(`Error during function call: ${name}`, { error })
-        
+
+        // Record tool call failure
+        if (name) {
+            recordToolCall(name, false, undefined, error instanceof Error ? error.message : String(error))
+        }
+
         sendClientEvent({
             type: "conversation.item.create",
             item: {
@@ -110,7 +113,7 @@ export function useHandleServerEvent({
                 }),
             },
         })
-        
+
         sendClientEvent({ type: "response.create" })
     }
 
@@ -118,18 +121,34 @@ export function useHandleServerEvent({
      * Process standard agent tool calls
      */
     const executeAgentTool = async (
-        fn: (args: any, transcriptLogsFiltered: TranscriptItem[]) => Promise<any> | any, 
-        args: any, 
-        name: string, 
-        callId?: string
+        fn: (args: any, transcriptLogsFiltered: TranscriptItem[]) => Promise<any> | any,
+        args: any,
+        name: string,
+        callId?: string,
     ) => {
         try {
             // Execute the function and get result
             const result = await fn(args, transcriptItems)
-            
+
             // Log the result to transcript
             addTranscriptBreadcrumb(`Function result: ${name}`, result)
-            
+
+            // Record telemetry for tool call
+            const resultCount =
+                result?.result?.hits?.hits?.length || (Array.isArray(result?.result) ? result.result.length : undefined)
+
+            // Send telemetry
+            recordToolCall(
+                name,
+                !result.error,
+                resultCount,
+                result.error
+                    ? typeof result.error === "string"
+                        ? result.error
+                        : JSON.stringify(result.error)
+                    : undefined,
+            )
+
             // Send result back to AI
             sendClientEvent({
                 type: "conversation.item.create",
@@ -139,7 +158,7 @@ export function useHandleServerEvent({
                     output: JSON.stringify(result),
                 },
             })
-            
+
             // Trigger AI to continue processing
             sendClientEvent({ type: "response.create" })
         } catch (error) {
@@ -152,11 +171,9 @@ export function useHandleServerEvent({
      */
     const handleAgentTransfer = (args: any, callId?: string) => {
         const destinationAgent = args.destination_agent
-        
+
         // Find the requested agent config
-        const newAgentConfig = selectedAgentConfigSet?.find(
-            a => a.name === destinationAgent
-        ) || null
+        const newAgentConfig = selectedAgentConfigSet?.find((a) => a.name === destinationAgent) || null
 
         // Perform the transfer if agent exists
         const transferSuccessful = !!newAgentConfig
@@ -175,7 +192,7 @@ export function useHandleServerEvent({
 
         // Log the transfer result
         addTranscriptBreadcrumb(`Transfer to ${destinationAgent}`, transferResult)
-        
+
         // Send result back to AI
         sendClientEvent({
             type: "conversation.item.create",
@@ -193,7 +210,7 @@ export function useHandleServerEvent({
     const handleFunctionCall = async (params: FunctionCallParams) => {
         const { name, call_id, arguments: argsString } = params
         let args: any
-        
+
         // Step 1: Parse the function arguments
         try {
             args = JSON.parse(argsString)
@@ -201,11 +218,11 @@ export function useHandleServerEvent({
         } catch (parseError) {
             // Handle JSON parsing errors
             console.error("JSON Parse Error:", parseError, "Raw JSON:", argsString)
-            
+
             addTranscriptBreadcrumb(`Error parsing arguments for function: ${name}`, {
                 error: parseError,
             })
-            
+
             sendClientEvent({
                 type: "conversation.item.create",
                 item: {
@@ -217,14 +234,14 @@ export function useHandleServerEvent({
                     }),
                 },
             })
-            
+
             sendClientEvent({ type: "response.create" })
             return
         }
 
         // Step 2: Execute the appropriate function
         try {
-            const currentAgent = selectedAgentConfigSet?.find(a => a.name === selectedAgentName)
+            const currentAgent = selectedAgentConfigSet?.find((a) => a.name === selectedAgentName)
 
             if (currentAgent?.toolLogic?.[name]) {
                 // Execute agent-specific tool
@@ -236,10 +253,10 @@ export function useHandleServerEvent({
             } else {
                 // Fallback for unknown functions
                 console.warn(`Unknown function called: ${name}`)
-                
+
                 const simulatedResult = { result: true }
                 addTranscriptBreadcrumb(`Function fallback: ${name}`, simulatedResult)
-                
+
                 sendClientEvent({
                     type: "conversation.item.create",
                     item: {
@@ -248,7 +265,7 @@ export function useHandleServerEvent({
                         output: JSON.stringify(simulatedResult),
                     },
                 })
-                
+
                 sendClientEvent({ type: "response.create" })
             }
         } catch (error) {
@@ -263,9 +280,7 @@ export function useHandleServerEvent({
     const handleSessionEvent = (event: ServerEvent) => {
         if (event.session?.id) {
             setSessionStatus("CONNECTED")
-            addTranscriptBreadcrumb(
-                `Session ID: ${event.session.id}\nStarted at: ${new Date().toLocaleString()}`
-            )
+            addTranscriptBreadcrumb(`Session ID: ${event.session.id}\nStarted at: ${new Date().toLocaleString()}`)
         }
     }
 
@@ -273,12 +288,12 @@ export function useHandleServerEvent({
      * Handle conversation message creation
      */
     const handleMessageCreation = (
-        itemId: string | undefined, 
-        role: "user" | "assistant" | undefined, 
-        text: string
+        itemId: string | undefined,
+        role: "user" | "assistant" | undefined,
+        text: string,
     ) => {
         // Skip if already in transcript
-        if (itemId && transcriptItems.some(item => item.itemId === itemId)) {
+        if (itemId && transcriptItems.some((item) => item.itemId === itemId)) {
             return
         }
 
@@ -286,7 +301,7 @@ export function useHandleServerEvent({
         if (itemId && role) {
             // For user audio input, show placeholder until transcription completes
             const displayText = text || (role === "user" ? "[Transcribing...]" : "")
-            
+
             // Cancel any ongoing assistant response when user speaks
             if (role === "user") {
                 cancelAssistantSpeech()
@@ -302,16 +317,17 @@ export function useHandleServerEvent({
      */
     const handleTranscriptionCompleted = (event: ServerEvent) => {
         const itemId = event.item_id
-        
+
         if (!itemId) return
-        
+
         // Format final transcript, handling empty or newline-only input
-        const finalTranscript = !event.transcript || event.transcript === "\n" 
-            ? "[inaudible]" 
-            : event.transcript
+        const finalTranscript = !event.transcript || event.transcript === "\n" ? "[inaudible]" : event.transcript
 
         // Replace placeholder with final transcript (false = replace, not append)
         updateTranscriptMessage(itemId, finalTranscript, false)
+
+        // Record user transcript for telemetry
+        recordUserTranscript(event)
     }
 
     /**
@@ -320,7 +336,7 @@ export function useHandleServerEvent({
     const handleTextDelta = (event: ServerEvent) => {
         const itemId = event.item_id
         const deltaText = event.delta || ""
-        
+
         if (itemId) {
             // Append new text to the message (true = append)
             updateTranscriptMessage(itemId, deltaText, true)
@@ -332,13 +348,27 @@ export function useHandleServerEvent({
      */
     const handleResponseDone = (event: ServerEvent) => {
         if (!event.response?.output) return
-        
+
+        // Record detailed response data for telemetry
+        if (event.response) {
+            // Record enhanced response details (high-level metadata)
+            recordResponseDoneDetails(event.response)
+            
+            // Record token usage if available
+            if (event.response.usage) {
+                recordTokenUsage(event.response.usage as any, event.response.voice)
+            }
+
+            // Record the full transcript for completed responses
+            // This creates a separate span with the complete transcript content
+            if (event.response.status === "completed") {
+                recordFullTranscript(event.response)
+            }
+        }
+
         // Process each function call in the response
-        event.response.output.forEach(outputItem => {
-            if (outputItem.type === "function_call" && 
-                outputItem.name && 
-                outputItem.arguments) {
-                
+        event.response.output.forEach((outputItem) => {
+            if (outputItem.type === "function_call" && outputItem.name && outputItem.arguments) {
                 handleFunctionCall({
                     name: outputItem.name,
                     call_id: outputItem.call_id,
@@ -353,12 +383,12 @@ export function useHandleServerEvent({
      */
     const handleAudioBufferStarted = (event: ServerEvent) => {
         if (!event.response_id) return
-        
+
         // Limit buffer tracking to prevent memory leaks
         if (outputAudioBuffersRef.current.length > 100) {
             outputAudioBuffersRef.current = outputAudioBuffersRef.current.slice(-100)
         }
-        
+
         // Add new buffer to tracking list
         outputAudioBuffersRef.current.push(event.response_id)
     }
@@ -368,11 +398,9 @@ export function useHandleServerEvent({
      */
     const handleAudioBufferEnded = (event: ServerEvent) => {
         if (!event.response_id) return
-        
+
         // Remove the buffer from tracking list
-        outputAudioBuffersRef.current = outputAudioBuffersRef.current.filter(
-            id => id !== event.response_id
-        )
+        outputAudioBuffersRef.current = outputAudioBuffersRef.current.filter((id) => id !== event.response_id)
     }
 
     /**
@@ -380,7 +408,7 @@ export function useHandleServerEvent({
      */
     const handleOutputItemDone = (event: ServerEvent) => {
         const itemId = event.item?.id
-        
+
         if (itemId) {
             updateTranscriptItemStatus(itemId, "DONE")
         }
@@ -392,6 +420,30 @@ export function useHandleServerEvent({
     const handleServerEvent = (event: ServerEvent) => {
         // Log all server events
         logServerEvent(event)
+
+        // For important events, send telemetry to the server
+        if (
+            event.type === "response.done" ||
+            event.type === "session.created" ||
+            event.type === "conversation.item.input_audio_transcription.completed" ||
+            event.type.includes("error")
+        ) {
+            // Send selective event data to avoid sending too much data
+            const telemetryData = {
+                eventId: event.event_id,
+                responseId: event.response_id,
+                hasOutput: !!event.response?.output,
+                hasUsage: !!event.response?.usage,
+                sessionId: event.session?.id,
+                itemId: event.item_id || event.item?.id,
+                statusDetails: event.response?.status_details,
+                // For transcription events, add transcript length info
+                transcriptLength: event.transcript ? event.transcript.length : undefined,
+                hasTranscript: !!event.transcript,
+            }
+
+            recordServerEvent(event.type, telemetryData)
+        }
 
         // Extract common fields used across multiple events
         const text = event.item?.content?.[0]?.text || event.item?.content?.[0]?.transcript || ""

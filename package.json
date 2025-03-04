@@ -1,6 +1,6 @@
 {
     "name": "realtime-elastic",
-    "version": "0.7.0",
+    "version": "0.8.0",
     "private": true,
     "scripts": {
         "dev": "next dev",
@@ -14,7 +14,7 @@
         "@elastic/opentelemetry-instrumentation-openai": "^0.4.1",
         "@elastic/opentelemetry-node": "^0.6.0",
         "@opentelemetry/api": "^1.9.0",
-        "@opentelemetry/api-logs": "^0.57.1",
+        "@opentelemetry/api-logs": "^0.57.2",
         "@opentelemetry/exporter-logs-otlp-grpc": "^0.57.1",
         "@opentelemetry/exporter-metrics-otlp-grpc": "^0.57.1",
         "@opentelemetry/exporter-trace-otlp-grpc": "^0.57.1",
@@ -29,7 +29,8 @@
         "babel-plugin-react-compiler": "^19.0.0-beta-714736e-20250131",
         "husky": "^9.1.7",
         "next": "15.1.6",
-        "openai": "^4.77.3",
+        "openai": "^4.86.1",
+        "perf_hooks": "^0.0.1",
         "prettier": "^3.4.2",
         "prettier-plugin-tailwindcss": "^0.6.11",
         "react": "^19.0.0",

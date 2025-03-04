@@ -93,8 +93,10 @@ const medicareAgent: AgentConfig = {
     ],
     toolLogic: {
         searchMedicare: async ({ query }: { query: string }) => {
-            return elasticSearchUtil(query, "medicare", "MedicareExpert");
+            return elasticSearchUtil(query, "medicare", "MedicareExpert")
         },
+
+        // TODO: example of passing transcript context
         summarizeContent: async (args, transcriptLogs) => {
             console.log("summarizeContent", args)
             console.log("transcriptLogs", transcriptLogs)
@@ -108,7 +110,7 @@ const medicareAgent: AgentConfig = {
   `
         },
         sendEmail: async (email, transcriptLogs) => {
-            return sendEmailUtil(email, transcriptLogs, "MedicareExpert");
+            return sendEmailUtil(email, transcriptLogs, "MedicareExpert")
         },
     },
 }

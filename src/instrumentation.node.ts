@@ -1,7 +1,7 @@
 // Don't even brother trying to implement otel comment out this code
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-grpc"
 import { NodeSDK } from "@opentelemetry/sdk-node"
-import { SimpleSpanProcessor } from "@opentelemetry/sdk-trace-node"
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-node"
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-grpc"
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-grpc"
 import { BatchLogRecordProcessor } from "@opentelemetry/sdk-logs"
@@ -25,7 +25,15 @@ const sdk = new NodeSDK({
             captureMessageContent: true,
         }),
     ],
-    spanProcessors: [new SimpleSpanProcessor(new OTLPTraceExporter())],
+    // Use BatchSpanProcessor instead of SimpleSpanProcessor to reduce concurrent exports
+    spanProcessors: [
+        new BatchSpanProcessor(new OTLPTraceExporter(), {
+            // Increase the scheduling delay and reduce max export batch size
+            scheduledDelayMillis: 3000,
+            maxExportBatchSize: 200,
+            exportTimeoutMillis: 10000,
+        }),
+    ],
 })
 
 async function shutdownSDK() {
