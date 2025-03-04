@@ -312,11 +312,6 @@ export function useHandleServerEvent({
         }
     }
 
-            // Add to transcript
-            addTranscriptMessage(itemId, role, displayText)
-        }
-    }
-
     /**
      * Process audio transcription events
      */
@@ -358,15 +353,11 @@ export function useHandleServerEvent({
         if (event.response) {
             // Record enhanced response details (high-level metadata)
             recordResponseDoneDetails(event.response)
-            //TODO update and fix this
+            
             // Record token usage if available
             if (event.response.usage) {
-                if (event.response.usage) {
-                    recordTokenUsage(event.response.usage as any, event.response.voice)
-                }
+                recordTokenUsage(event.response.usage as any, event.response.voice)
             }
-        })
-    }
 
             // Record the full transcript for completed responses
             // This creates a separate span with the complete transcript content
