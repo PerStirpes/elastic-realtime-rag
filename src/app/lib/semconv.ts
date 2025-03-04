@@ -26,7 +26,7 @@
  * dependency on `@opentelemetry/semantic-conventions` and use its
  * `.../incubating` entry-point.
  *
- * There are a small number of stable semconv defintions used, so the main
+ * There are a small number of stable semconv definitions used, so the main
  * entry-point *could* be used. However, for now we opt to copy those
  * definitions as well.
  */
