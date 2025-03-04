@@ -1,4 +1,5 @@
 import { RefObject } from "react"
+import { recordRealtimeFetch } from "./client-telemetry"
 
 export async function createRealtimeConnection(
     EPHEMERAL_KEY: string,
@@ -23,14 +24,40 @@ export async function createRealtimeConnection(
     const baseUrl = "https://api.openai.com/v1/realtime"
     const model = "gpt-4o-mini-realtime-preview"
 
-    const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
-        method: "POST",
-        body: offer.sdp,
-        headers: {
-            Authorization: `Bearer ${EPHEMERAL_KEY}`,
-            "Content-Type": "application/sdp",
-        },
-    })
+    const url = `${baseUrl}?model=${model}`
+    const method = "POST"
+    let statusCode
+    let error
+    let sdpResponse
+
+    try {
+        sdpResponse = await fetch(url, {
+            method,
+            body: offer.sdp,
+            headers: {
+                Authorization: `Bearer ${EPHEMERAL_KEY}`,
+                "Content-Type": "application/sdp",
+            },
+        })
+
+        statusCode = sdpResponse.status
+
+        // Record telemetry
+        recordRealtimeFetch(url, method, statusCode, undefined, model)
+
+        if (!sdpResponse.ok) {
+            throw new Error(`HTTP error! status: ${sdpResponse.status}`)
+        }
+    } catch (err) {
+        // Capture error for telemetry
+        error = err instanceof Error ? err.message : String(err)
+
+        // Record failed fetch
+        recordRealtimeFetch(url, method, statusCode, error, model)
+
+        // Re-throw the error
+        throw err
+    }
 
     const answerSdp = await sdpResponse.text()
     const answer: RTCSessionDescriptionInit = {

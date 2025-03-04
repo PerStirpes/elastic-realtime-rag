@@ -17,31 +17,10 @@ export const EventProvider: FC<PropsWithChildren> = ({ children }) => {
     const [loggedEvents, setLoggedEvents] = useState<LoggedEvent[]>([])
 
     function addLoggedEvent(direction: "client" | "server", eventName: string, eventData: Record<string, any>) {
-        async function sendLogEvent(eventData: Record<string, any>) {
-            try {
-                const response = await fetch("/api/logEvent", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(eventData),
-                })
-
-                const result = await response.json()
-                if (!response.ok) {
-                    console.error("Failed to send log event:", result)
-                }
-            } catch (error) {
-                console.error("Error sending log event:", error)
-            }
-        }
-
         const id = eventData.event_id || uuidv4()
 
         if (eventName === "response.audio_transcript.delta" || eventName === "response.function_call_arguments.delta") {
             console.log("Skipping logging of response.audio_transcript.delta event")
-        } else {
-            sendLogEvent({ ...eventData, eventName })
         }
 
         setLoggedEvents((prev) => {

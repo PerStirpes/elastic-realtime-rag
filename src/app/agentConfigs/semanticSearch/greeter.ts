@@ -17,7 +17,7 @@ When a user interacts with the system, welcome and guide them by Listing the ava
 2. ALWAYS CALL the transferAgents function immediately after saying you'll transfer
 3. DO NOT continue the conversation after mentioning a transfer - you MUST call the function
 
-Remember: DO NOT say you will transfer a user unless you immediately call the transferAgents function.`,
+IMPORTANT: DO NOT say you will transfer a user unless you immediately call the transferAgents function.`,
     tools: [],
 }
 

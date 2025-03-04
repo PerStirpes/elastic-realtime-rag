@@ -5,6 +5,7 @@ import { createRealtimeConnection } from "@/app/lib/realtimeConnection"
 import { useTranscript } from "@/app/contexts/TranscriptContext"
 import { useEvent } from "@/app/contexts/EventContext"
 import { useHandleServerEvent } from "./useHandleServerEvent"
+import { recordServerEvent } from "../lib/client-telemetry"
 
 export function useRealtimeConnection({
     selectedAgentName,
@@ -63,7 +64,26 @@ export function useRealtimeConnection({
     function sendClientEvent(eventObj: any, eventNameSuffix = "") {
         if (dcRef.current && dcRef.current.readyState === "open") {
             logClientEvent(eventObj, eventNameSuffix)
-            dcRef.current.send(JSON.stringify(eventObj))
+
+            try {
+                // If this is a special event type, record it for telemetry
+                if (
+                    eventObj.type === "conversation.item.create" ||
+                    eventObj.type === "response.cancel" ||
+                    eventObj.type === "session.update"
+                ) {
+                    recordServerEvent(eventObj.type, {
+                        itemType: eventObj.item?.type,
+                        itemRole: eventObj.item?.role,
+                        suffix: eventNameSuffix,
+                    })
+                }
+
+                // Send the event via data channel
+                dcRef.current.send(JSON.stringify(eventObj))
+            } catch (error) {
+                console.error("Failed to send message", error)
+            }
         } else {
             logClientEvent({ attemptedEvent: eventObj.type }, "error.data_channel_not_open")
             console.log("Failed to send message - data channel not open", eventObj.type)
