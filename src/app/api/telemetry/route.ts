@@ -26,6 +26,9 @@ import {
     ATTR_GEN_AI_INPUT_AUDIO_TOKENS,
     ATTR_GEN_AI_OUTPUT_TEXT_TOKENS,
     ATTR_GEN_AI_OUTPUT_AUDIO_TOKENS,
+    ATTR_GEN_AI_CACHED_TOKENS,
+    ATTR_GEN_AI_CACHED_TEXT_TOKENS,
+    ATTR_GEN_AI_CACHED_AUDIO_TOKENS,
     ATTR_GEN_AI_CONVERSATION_ID,
     ATTR_GEN_AI_TRANSCRIPT_ROLE,
     METRIC_GEN_AI_CLIENT_TOKEN_USAGE,
@@ -122,14 +125,81 @@ function setArrayAttribute(span: Span, attributeName: string, value: unknown): v
  * Process token usage data
  */
 function processTokenUsage(span: Span, eventData: Record<string, any>): void {
+    console.log("Processing token usage with:", JSON.stringify(eventData, null, 2))
+
+    // If we have usage data in the response, use that
+    if (eventData.response?.usage) {
+        const usage = eventData.response.usage
+        eventData.totalTokens = usage.total_tokens
+        eventData.inputTokens = usage.input_tokens
+        eventData.outputTokens = usage.output_tokens
+        eventData.input_token_details = usage.input_token_details
+        eventData.output_token_details = usage.output_token_details
+    } else if (eventData.usage) {
+        const usage = eventData.usage
+        eventData.totalTokens = usage.total_tokens
+        eventData.inputTokens = usage.input_tokens
+        eventData.outputTokens = usage.output_tokens
+        eventData.input_token_details = usage.input_token_details
+        eventData.output_token_details = usage.output_token_details
+    }
+
+    // Basic token counts
     setAttributeIfExists(span, ATTR_GEN_AI_TOTAL_TOKENS, eventData.totalTokens)
     setAttributeIfExists(span, ATTR_GEN_AI_USAGE_INPUT_TOKENS, eventData.inputTokens)
     setAttributeIfExists(span, ATTR_GEN_AI_USAGE_OUTPUT_TOKENS, eventData.outputTokens)
     setAttributeIfExists(span, ATTR_GEN_AI_RESPONSE_MODEL, eventData.model)
-    setAttributeIfExists(span, ATTR_GEN_AI_INPUT_TEXT_TOKENS, eventData.inputTextTokens)
-    setAttributeIfExists(span, ATTR_GEN_AI_INPUT_AUDIO_TOKENS, eventData.inputAudioTokens)
-    setAttributeIfExists(span, ATTR_GEN_AI_OUTPUT_TEXT_TOKENS, eventData.outputTextTokens)
-    setAttributeIfExists(span, ATTR_GEN_AI_OUTPUT_AUDIO_TOKENS, eventData.outputAudioTokens)
+
+    // Process input token details if available
+    if (eventData.inputTokenDetails || eventData.input_token_details) {
+        const inputDetails = eventData.inputTokenDetails || eventData.input_token_details
+        console.log("Processing input token details:", JSON.stringify(inputDetails, null, 2))
+
+        if (inputDetails) {
+            setAttributeIfExists(span, ATTR_GEN_AI_INPUT_TEXT_TOKENS, inputDetails.text_tokens)
+            setAttributeIfExists(span, ATTR_GEN_AI_INPUT_AUDIO_TOKENS, inputDetails.audio_tokens)
+
+            // Process cached tokens if available
+            if (inputDetails.cached_tokens) {
+                console.log("Setting cached tokens:", inputDetails.cached_tokens)
+                setAttributeIfExists(span, ATTR_GEN_AI_CACHED_TOKENS, inputDetails.cached_tokens)
+
+                if (inputDetails.cached_tokens_details) {
+                    console.log(
+                        "Setting cached tokens details:",
+                        JSON.stringify(inputDetails.cached_tokens_details, null, 2),
+                    )
+                    setAttributeIfExists(
+                        span,
+                        ATTR_GEN_AI_CACHED_TEXT_TOKENS,
+                        inputDetails.cached_tokens_details.text_tokens,
+                    )
+                    setAttributeIfExists(
+                        span,
+                        ATTR_GEN_AI_CACHED_AUDIO_TOKENS,
+                        inputDetails.cached_tokens_details.audio_tokens,
+                    )
+                }
+            }
+        }
+    } else {
+        // Fall back to flat properties if details object isn't available
+        setAttributeIfExists(span, ATTR_GEN_AI_INPUT_TEXT_TOKENS, eventData.inputTextTokens)
+        setAttributeIfExists(span, ATTR_GEN_AI_INPUT_AUDIO_TOKENS, eventData.inputAudioTokens)
+    }
+
+    // Process output token details if available
+    if (eventData.outputTokenDetails || eventData.output_token_details) {
+        const outputDetails = eventData.outputTokenDetails || eventData.output_token_details
+        if (outputDetails) {
+            setAttributeIfExists(span, ATTR_GEN_AI_OUTPUT_TEXT_TOKENS, outputDetails.text_tokens)
+            setAttributeIfExists(span, ATTR_GEN_AI_OUTPUT_AUDIO_TOKENS, outputDetails.audio_tokens)
+        }
+    } else {
+        // Fall back to flat properties if details object isn't available
+        setAttributeIfExists(span, ATTR_GEN_AI_OUTPUT_TEXT_TOKENS, eventData.outputTextTokens)
+        setAttributeIfExists(span, ATTR_GEN_AI_OUTPUT_AUDIO_TOKENS, eventData.outputAudioTokens)
+    }
 
     // Record token usage metrics
     const commonAttrs: Attributes = {
@@ -162,6 +232,15 @@ function processTokenUsage(span: Span, eventData: Record<string, any>): void {
         genAiTokenUsage.record(eventData.totalTokens, {
             ...commonAttrs,
             [ATTR_GEN_AI_TOKEN_TYPE]: "total",
+        })
+    }
+
+    // Record cached tokens if available
+    const inputDetails = eventData.inputTokenDetails || eventData.input_token_details
+    if (inputDetails && inputDetails.cached_tokens) {
+        genAiTokenUsage.record(inputDetails.cached_tokens, {
+            ...commonAttrs,
+            [ATTR_GEN_AI_TOKEN_TYPE]: "cached",
         })
     }
 }
@@ -224,9 +303,9 @@ function processResponseDetails(span: Span, eventData: Record<string, any>): voi
     setArrayAttribute(span, ATTR_GEN_AI_CONTENT_TYPES, eventData.contentTypes)
 
     // Transcript information
-    setAttributeIfExists(span, ATTR_GEN_AI_HAS_TRANSCRIPT, eventData.hasTranscript)
+    setAttributeIfExists(span, ATTR_GEN_AI_HAS_TRANSCRIPT, eventData.hasTranscript) // REMOVE
     setAttributeIfExists(span, ATTR_GEN_AI_TRANSCRIPT_LENGTH, eventData.transcriptLength)
-    setAttributeIfExists(span, ATTR_GEN_AI_TRANSCRIPT_PREVIEW, eventData.transcriptPreview)
+    setAttributeIfExists(span, ATTR_GEN_AI_TRANSCRIPT_PREVIEW, eventData.transcriptPreview) //REMOVE
 }
 
 /**
@@ -235,7 +314,7 @@ function processResponseDetails(span: Span, eventData: Record<string, any>): voi
 function processFullTranscript(span: Span, eventData: Record<string, any>): void {
     setAttributeIfExists(span, ATTR_GEN_AI_RESPONSE_ID, eventData.responseId)
     setAttributeIfExists(span, ATTR_GEN_AI_OUTPUT_ITEM_ID, eventData.outputItemId)
-    setAttributeIfExists(span, ATTR_GEN_AI_OUTPUT_ITEM_ROLE, eventData.role)
+    setAttributeIfExists(span, ATTR_GEN_AI_OUTPUT_ITEM_ROLE, eventData.role) //REMOVE
     setAttributeIfExists(span, ATTR_GEN_AI_RESPONSE_STATUS, eventData.status)
     setAttributeIfExists(span, ATTR_GEN_AI_CONVERSATION_ID, eventData.conversationId)
     setAttributeIfExists(span, ATTR_GEN_AI_TRANSCRIPT_FULL, eventData.transcript)
@@ -255,7 +334,7 @@ function processUserTranscript(span: Span, eventData: Record<string, any>): void
     setAttributeIfExists(span, ATTR_GEN_AI_TRANSCRIPT_FULL, eventData.transcript)
 
     // Always mark these as from user
-    span.setAttribute(ATTR_GEN_AI_TRANSCRIPT_SOURCE, "user")
+    span.setAttribute(ATTR_GEN_AI_TRANSCRIPT_SOURCE, "user") //REMOVE
     span.setAttribute(ATTR_GEN_AI_TRANSCRIPT_ROLE, "user")
 }
 
@@ -370,7 +449,7 @@ class BatchTelemetryProcessor {
 
         // Process event data using context
         context.with(ctx, () => {
-            debug(`Processing event: ${eventType}`, eventData)
+            console.log(`context.with Processing event: ${eventType}`, eventData)
 
             // Process event data based on type
             switch (eventType) {
@@ -431,10 +510,40 @@ function validateEventData(eventType: string, eventData: any): string | null {
         return "Missing eventData"
     }
 
+    // If we receive an event with type property, extract it as the eventType
+    if (eventData.type === "response.done" && eventType !== "response.done") {
+        debug(`Converting event type from ${eventType} to response.done`)
+        return validateEventData("response.done", eventData)
+    }
+
     switch (eventType) {
         case "token_usage":
-            if (!eventData.totalTokens && !eventData.inputTokens && !eventData.outputTokens) {
-                return "Token usage events require at least one token count"
+            debug("Validating token_usage event:", JSON.stringify(eventData, null, 2))
+            // Check if we have basic token counts OR usage data in nested structure
+            if (
+                !eventData.totalTokens &&
+                !eventData.inputTokens &&
+                !eventData.outputTokens &&
+                !(eventData.usage || eventData.response?.usage)
+            ) {
+                return "Token usage events require at least one token count or usage object"
+            }
+
+            // If data comes from response.done event with nested usage, extract it
+            if (eventData.response?.usage && !eventData.totalTokens) {
+                const usage = eventData.response.usage
+                eventData.totalTokens = usage.total_tokens
+                eventData.inputTokens = usage.input_tokens
+                eventData.outputTokens = usage.output_tokens
+                eventData.input_token_details = usage.input_token_details
+                eventData.output_token_details = usage.output_token_details
+            } else if (eventData.usage && !eventData.totalTokens) {
+                const usage = eventData.usage
+                eventData.totalTokens = usage.total_tokens
+                eventData.inputTokens = usage.input_tokens
+                eventData.outputTokens = usage.output_tokens
+                eventData.input_token_details = usage.input_token_details
+                eventData.output_token_details = usage.output_token_details
             }
             break
 
@@ -454,6 +563,48 @@ function validateEventData(eventType: string, eventData: any): string | null {
         case "user_transcript":
             if (!eventData.transcript) {
                 return "Transcript events require transcript content"
+            }
+            break
+
+        case "response.done":
+            console.log("validateEventData", eventType, eventData)
+            // Extract response data if this is a response.done event
+            if (eventData.response) {
+                // Extract token usage
+                if (eventData.response.usage) {
+                    const usage = eventData.response.usage
+                    eventData.totalTokens = usage.total_tokens
+                    eventData.inputTokens = usage.input_tokens
+                    eventData.outputTokens = usage.output_tokens
+                    eventData.input_token_details = usage.input_token_details
+                    eventData.output_token_details = usage.output_token_details
+                }
+
+                // Extract response metadata
+                eventData.responseId = eventData.response.id
+                eventData.responseStatus = eventData.response.status
+                eventData.conversationId = eventData.response.conversation_id
+                eventData.model = eventData.response.model
+                eventData.voice = eventData.response.voice
+                eventData.outputAudioFormat = eventData.response.output_audio_format
+                eventData.temperature = eventData.response.temperature
+                eventData.maxOutputTokens = eventData.response.max_output_tokens
+                eventData.modalities = eventData.response.modalities
+
+                // Get the first output item if available
+                if (eventData.response.output && eventData.response.output.length > 0) {
+                    const output = eventData.response.output[0]
+                    eventData.outputItemId = output.id
+                    eventData.outputItemType = output.type
+                    eventData.outputItemStatus = output.status
+                    eventData.outputItemRole = output.role
+
+                    // Extract transcript if available
+                    if (output.content && output.content.length > 0 && output.content[0].transcript) {
+                        eventData.transcript = output.content[0].transcript
+                        eventData.hasTranscript = true
+                    }
+                }
             }
             break
     }
@@ -604,6 +755,13 @@ export async function POST(req: NextRequest) {
 
                     case "user_transcript":
                         processUserTranscript(span, eventData)
+                        break
+
+                    case "response.done":
+                        // Process token usage first
+                        processTokenUsage(span, eventData)
+                        // Then process response details
+                        processResponseDetails(span, eventData)
                         break
 
                     default:

@@ -89,6 +89,9 @@ export const ATTR_GEN_AI_INPUT_TEXT_TOKENS = "gen_ai.usage.input_text_tokens"
 export const ATTR_GEN_AI_INPUT_AUDIO_TOKENS = "gen_ai.usage.input_audio_tokens"
 export const ATTR_GEN_AI_OUTPUT_TEXT_TOKENS = "gen_ai.usage.output_text_tokens"
 export const ATTR_GEN_AI_OUTPUT_AUDIO_TOKENS = "gen_ai.usage.output_audio_tokens"
+export const ATTR_GEN_AI_CACHED_TOKENS = "gen_ai.usage.cached_tokens"
+export const ATTR_GEN_AI_CACHED_TEXT_TOKENS = "gen_ai.usage.cached_text_tokens"
+export const ATTR_GEN_AI_CACHED_AUDIO_TOKENS = "gen_ai.usage.cached_audio_tokens"
 
 // Conversation attributes
 export const ATTR_GEN_AI_CONVERSATION_ID = "gen_ai.conversation.id"

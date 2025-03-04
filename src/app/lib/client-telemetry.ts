@@ -7,23 +7,71 @@
  */
 
 /**
+ * Token usage structure from OpenAI response.done event
+ */
+interface TokenUsage {
+    total_tokens: number
+    input_tokens: number
+    output_tokens: number
+    input_token_details?: {
+        text_tokens?: number
+        audio_tokens?: number
+        cached_tokens?: number
+        cached_tokens_details?: {
+            text_tokens?: number
+            audio_tokens?: number
+        }
+    }
+    output_token_details?: {
+        text_tokens?: number
+        audio_tokens?: number
+    }
+}
+
+/**
  * Records token usage metrics from OpenAI response.done events
  */
-export async function recordTokenUsage(usageData: any, model?: string) {
+export async function recordTokenUsage(usageData: TokenUsage, model?: string) {
     try {
+        // Create event data with all token details
+        const eventData: any = {
+            totalTokens: usageData.total_tokens,
+            inputTokens: usageData.input_tokens,
+            outputTokens: usageData.output_tokens,
+            model: model || "unknown",
+        }
+
+        // Add input token details if available
+        if (usageData.input_token_details) {
+            eventData.inputTextTokens = usageData.input_token_details.text_tokens
+            eventData.inputAudioTokens = usageData.input_token_details.audio_tokens
+
+            // Add cached tokens information
+            if (usageData.input_token_details.cached_tokens) {
+                eventData.cachedTokens = usageData.input_token_details.cached_tokens
+
+                // Add cached tokens details if available
+                if (usageData.input_token_details.cached_tokens_details) {
+                    eventData.cachedTextTokens = usageData.input_token_details.cached_tokens_details.text_tokens
+                    eventData.cachedAudioTokens = usageData.input_token_details.cached_tokens_details.audio_tokens
+                }
+            }
+        }
+
+        // Add output token details if available
+        if (usageData.output_token_details) {
+            eventData.outputTextTokens = usageData.output_token_details.text_tokens
+            eventData.outputAudioTokens = usageData.output_token_details.audio_tokens
+        }
+
+        // Include the full input_token_details and output_token_details objects
+        // This ensures all fields are available even if we don't explicitly extract them
+        eventData.input_token_details = usageData.input_token_details
+        eventData.output_token_details = usageData.output_token_details
+
         const payload = {
             eventType: "token_usage",
-            eventData: {
-                totalTokens: usageData.total_tokens,
-                inputTokens: usageData.input_tokens,
-                outputTokens: usageData.output_tokens,
-                model: model || "unknown",
-                // Add detailed breakdowns if available
-                inputTextTokens: usageData.input_token_details?.text_tokens,
-                inputAudioTokens: usageData.input_token_details?.audio_tokens,
-                outputTextTokens: usageData.output_token_details?.text_tokens,
-                outputAudioTokens: usageData.output_token_details?.audio_tokens,
-            },
+            eventData,
         }
 
         await sendTelemetry(payload)
@@ -235,10 +283,43 @@ export async function recordUserTranscript(event: any) {
 }
 
 /**
+ * Records a complete response.done event directly, including token usage and all metadata
+ */
+export async function recordCompleteDoneEvent(eventData: any) {
+    try {
+        // First, extract and record token usage separately
+        if (eventData.response?.usage) {
+            await recordTokenUsage(eventData.response.usage, eventData.response.model)
+        }
+
+        // Second, record response details
+        if (eventData.response) {
+            await recordResponseDoneDetails(eventData.response)
+        }
+
+        // Finally, send the complete event as-is
+        const payload = {
+            eventType: "response.done",
+            eventData,
+        }
+
+        await sendTelemetry(payload)
+    } catch (error) {
+        console.error("Error recording complete done event:", error)
+    }
+}
+
+/**
  * Sends telemetry data to the server endpoint
  */
 async function sendTelemetry(payload: any) {
     try {
+        // Log the payload being sent for debugging
+        console.log(
+            `Sending telemetry ${payload.eventType}:`,
+            payload.eventType === "token_usage" ? JSON.stringify(payload.eventData, null, 2) : "payload",
+        )
+
         const response = await fetch("/api/telemetry", {
             method: "POST",
             headers: {
