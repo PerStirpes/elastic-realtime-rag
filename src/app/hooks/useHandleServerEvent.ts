@@ -353,10 +353,12 @@ export function useHandleServerEvent({
         if (event.response) {
             // Record enhanced response details (high-level metadata)
             recordResponseDoneDetails(event.response)
-
+            //TODO update and fix this
             // Record token usage if available
             if (event.response.usage) {
-                recordTokenUsage(event.response.usage, event.response.voice)
+                if (event.response.usage) {
+                    recordTokenUsage(event.response.usage as any, event.response.voice)
+                }
             }
 
             // Record the full transcript for completed responses
