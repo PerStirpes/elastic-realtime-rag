@@ -85,6 +85,83 @@ export const sendEmailUtil = instrumentToolFunction(
 )
 
 /**
+ * Shared Elasticsearch utility for fetching data from different endpoints
+ */
+export async function elasticSearchUtil(query: string, endpoint: string, agentName: string = "Agent") {
+    try {
+        console.log(`[${agentName}] Searching ${endpoint} for: ${query}`)
+
+        const response = await fetch(`/api/${endpoint}?q=${encodeURIComponent(query)}`, {
+            method: "GET",
+            headers: {
+                "Content-Type": "application/json",
+            },
+        })
+
+        if (!response.ok) {
+            console.error(`Error from server when searching ${endpoint}:`, response)
+            return { error: `Server error while searching ${endpoint} data.` }
+        }
+
+        const completion = await response.json()
+        return { result: completion }
+    } catch (error) {
+        console.error(`[${agentName}] search${endpoint} encountered an error:`, error)
+        return {
+            error: `An unexpected error occurred while searching ${endpoint} data.`,
+            results: [],
+        }
+    }
+}
+
+/**
+ * Shared email utility for sending conversation transcripts via email
+ */
+export async function sendEmailUtil(email: any, transcriptLogs: any, agentName: string = "Agent") {
+    try {
+        function extractTitleAndRole(
+            transcriptLogs: { role: string | undefined; title: string }[],
+        ): { title: string; role: string }[] {
+            return transcriptLogs
+                .filter(
+                    ({ role, title }) =>
+                        role &&
+                        (role === "user" || role === "assistant") &&
+                        !/^hi\b|^hello\b/i.test(title) &&
+                        !/\[inaudible\]/i.test(title),
+                )
+                .map(({ title, role }) => ({ title, role: role as string }))
+        }
+
+        const filteredTitles = extractTitleAndRole(
+            transcriptLogs.filter((log: any) => log.role !== undefined) as { role: string; title: string }[],
+        )
+
+        console.log("filteredTitles", filteredTitles)
+
+        const response = await fetch(`/api/sendEmail`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ email: email, message: filteredTitles }),
+        })
+
+        if (!response.ok) {
+            console.error("Error from server:", response)
+            return { error: "Server error while sending email." }
+        }
+
+        const result = await response.json()
+        console.log("result", result)
+        return { result }
+    } catch (error) {
+        console.error(`[${agentName}] sendEmail encountered an error:`, error)
+        return { error: "An unexpected error occurred while sending the email." }
+    }
+}
+
+/**
  * This defines and adds "transferAgents" tool dynamically based on the specified downstreamAgents on each agent.
  */
 export function injectTransferTools(agentDefs: AgentConfig[]): AgentConfig[] {

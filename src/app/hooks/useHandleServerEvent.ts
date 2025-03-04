@@ -306,6 +306,11 @@ export function useHandleServerEvent({
             if (role === "user") {
                 cancelAssistantSpeech()
             }
+            
+            // Add to transcript
+            addTranscriptMessage(itemId, role, displayText)
+        }
+    }
 
             // Add to transcript
             addTranscriptMessage(itemId, role, displayText)
@@ -360,6 +365,8 @@ export function useHandleServerEvent({
                     recordTokenUsage(event.response.usage as any, event.response.voice)
                 }
             }
+        })
+    }
 
             // Record the full transcript for completed responses
             // This creates a separate span with the complete transcript content
