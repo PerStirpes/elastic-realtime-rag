@@ -314,11 +314,7 @@ export async function recordCompleteDoneEvent(eventData: any) {
  */
 async function sendTelemetry(payload: any) {
     try {
-        // Log the payload being sent for debugging
-        console.log(
-            `Sending telemetry ${payload.eventType}:`,
-            payload.eventType === "token_usage" ? JSON.stringify(payload.eventData, null, 2) : "payload",
-        )
+        // No logging of telemetry payloads
 
         const response = await fetch("/api/telemetry", {
             method: "POST",
@@ -328,10 +324,11 @@ async function sendTelemetry(payload: any) {
             body: JSON.stringify(payload),
         })
 
+        // Silently fail if telemetry submission fails
         if (!response.ok) {
-            console.error("Telemetry submission failed:", await response.text())
+            // We don't log anything here to avoid error messages
         }
     } catch (error) {
-        console.error("Failed to send telemetry:", error)
+        // Silently fail if telemetry encounters an error
     }
 }
