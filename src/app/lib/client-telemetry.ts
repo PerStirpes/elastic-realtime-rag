@@ -6,7 +6,6 @@
  * and the server-side tracing infrastructure.
  */
 
-
 import { TokenUsage } from "../types"
 
 /**
@@ -294,15 +293,20 @@ export async function recordCompleteDoneEvent(eventData: any) {
  * Sends telemetry data to the server endpoint
  */
 async function sendTelemetry(payload: any) {
-    // No logging of telemetry payloads
+    try {
+        const response = await fetch("/api/telemetry", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+        })
 
-    const response = await fetch("/api/telemetry", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-    })
-    console.log("one off failed", response)
-
+        // Log failure details if the response is not OK
+        if (!response.ok) {
+            console.warn("Telemetry request failed:", response.status, await response.text())
+        }
+    } catch (error) {
+        console.error("Error sending telemetry:", error)
+    }
 }

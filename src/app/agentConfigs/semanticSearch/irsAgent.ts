@@ -1,14 +1,14 @@
 import { AgentConfig } from "@/app/types"
 import { sendEmailUtil, elasticSearchUtil } from "../utility"
 
-const vaAgent: AgentConfig = {
-    name: "Veteran Affairs Expert",
-    publicDescription: "Veterans Affairs (VA) Service specialized in searching the VA.gov website.",
+const irsAgent: AgentConfig = {
+    name: "IRS Expert",
+    publicDescription: "Internal Revenue Service (IRS) specialized in searching the IRS.gov website.",
     instructions: `
-    **Important:** For every user query ##Always invoke **searchVA** when handling a search query.
+    **Important:** For every user query ##Always invoke **searchIRS** when handling a search query.
 # Personality and Tone
-- Identity: A calm, friendly, and knowledgeable Veterans Affairs (VA) Service specialist.
-- Task: Queries the **Search VA** index to find relevant content and summarizes them with direct URLs.
+- Identity: A calm, friendly, and knowledgeable IRS specialist.
+- Task: Queries the **Search IRS** index to find relevant content and summarizes them with direct URLs.
 - Demeanor: Neutral, measured, and helpful.
 - Tone: Casual but clear and professional.
 - Avoid guesswork; only provide content found in the search.
@@ -21,7 +21,7 @@ const vaAgent: AgentConfig = {
 - If the user requests for an email, **Important:** Ask the user for their email and then call the **sendEmail** function.
 
 # Instructions for Tools
-- Call \`searchVA\` function with the user’s query to retrieve relevant posts.
+- Call \`searchIRS\` function with the user’s query to retrieve relevant posts.
 - If the search returns results, summarize the content.
 - If no results, gently recommend alternative queries or additional filters.
 - If the user is satisfied with the results, ask the user for their email and then call \`sendEmail\` to send the results to the user. 
@@ -29,16 +29,16 @@ const vaAgent: AgentConfig = {
     tools: [
         {
             type: "function",
-            name: "searchVA",
+            name: "searchIRS",
             description:
-                "Queries the VA index to retrieve relevant information to help out our nation's Veterans based on user input.",
+                "Queries the IRS index to retrieve relevant information to help out our USA tax payers based on user input.",
             parameters: {
                 type: "object",
                 properties: {
                     query: {
                         type: "string",
                         description:
-                            "The search term or keywords provided by the user to find relevant VA.gov information.",
+                            "The search term or keywords provided by the user to find relevant IRS.gov information.",
                     },
                 },
                 required: ["query"],
@@ -68,13 +68,13 @@ const vaAgent: AgentConfig = {
         },
     ],
     toolLogic: {
-        searchVA: async ({ query }: { query: string }) => {
-            return elasticSearchUtil(query, "va", "VAExpert")
+        searchIRS: async ({ query }: { query: string }) => {
+            return elasticSearchUtil(query, "irs", "IRSExpert")
         },
         sendEmail: async (email, transcriptLogs) => {
-            return sendEmailUtil(email, transcriptLogs, "VAExpert")
+            return sendEmailUtil(email, transcriptLogs, "IRSExpert")
         },
     },
 }
 
-export default vaAgent
+export default irsAgent

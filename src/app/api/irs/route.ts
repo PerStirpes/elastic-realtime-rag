@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
                                         },
                                         inner_hits: {
                                             size: 2,
-                                            name: "search-va.semantic_text",
+                                            name: "search-irs.semantic_text",
                                             _source: ["semantic_text.inference.chunks.text"],
                                         },
                                     },
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
         }
 
         const searchResult = await esClient.search<SearchResult>({
-            index: "search-va",
+            index: "search-irs",
             body: esQuery,
         })
 

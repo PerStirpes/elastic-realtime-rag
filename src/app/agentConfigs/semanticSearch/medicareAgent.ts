@@ -1,5 +1,5 @@
 import { AgentConfig } from "@/app/types"
-import { sendEmailUtil, elasticSearchUtil } from "../utils"
+import { sendEmailUtil, elasticSearchUtil } from "../utility"
 
 const medicareAgent: AgentConfig = {
     name: "Medicare Expert",

@@ -1,5 +1,5 @@
 import { AgentConfig } from "@/app/types"
-import { elasticSearchUtil } from "../utils"
+import { elasticSearchUtil } from "../utility"
 
 const elasticExpert: AgentConfig = {
     name: "Elastic Expert",
@@ -61,7 +61,7 @@ Notes:
     ],
     toolLogic: {
         searchElasticBlogs: async ({ query }: { query: string }) => {
-            return elasticSearchUtil(query, "elasticsearch", "ElasticExpert");
+            return elasticSearchUtil(query, "elasticsearch", "ElasticExpert")
         },
         summarizeBlogs: async (args, transcriptLogs) => {
             console.log("[toolLogic] summarizeBlogs args:", args)
