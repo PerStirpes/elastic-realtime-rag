@@ -4,7 +4,6 @@ import { trace, SpanKind, SpanStatusCode } from "@opentelemetry/api"
 const ATTR_GEN_AI_OPERATION_NAME = "gen_ai.operation.name"
 const ATTR_GEN_AI_SYSTEM = "gen_ai.system"
 const ATTR_GEN_AI_REQUEST_MODEL = "gen_ai.request.model"
-//todo check to see if this is tracing
 
 // Get a tracer instance
 const tracer = trace.getTracer("openai-realtime-server")

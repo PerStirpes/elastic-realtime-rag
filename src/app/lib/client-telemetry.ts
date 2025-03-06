@@ -6,27 +6,8 @@
  * and the server-side tracing infrastructure.
  */
 
-/**
- * Token usage structure from OpenAI response.done event
- */
-interface TokenUsage {
-    total_tokens: number
-    input_tokens: number
-    output_tokens: number
-    input_token_details?: {
-        text_tokens?: number
-        audio_tokens?: number
-        cached_tokens?: number
-        cached_tokens_details?: {
-            text_tokens?: number
-            audio_tokens?: number
-        }
-    }
-    output_token_details?: {
-        text_tokens?: number
-        audio_tokens?: number
-    }
-}
+
+import { TokenUsage } from "../types"
 
 /**
  * Records token usage metrics from OpenAI response.done events
@@ -313,25 +294,15 @@ export async function recordCompleteDoneEvent(eventData: any) {
  * Sends telemetry data to the server endpoint
  */
 async function sendTelemetry(payload: any) {
-    try {
-        // Log the payload being sent for debugging
-        console.log(
-            `Sending telemetry ${payload.eventType}:`,
-            payload.eventType === "token_usage" ? JSON.stringify(payload.eventData, null, 2) : "payload",
-        )
+    // No logging of telemetry payloads
 
-        const response = await fetch("/api/telemetry", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-        })
+    const response = await fetch("/api/telemetry", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+    })
+    console.log("one off failed", response)
 
-        if (!response.ok) {
-            console.error("Telemetry submission failed:", await response.text())
-        }
-    } catch (error) {
-        console.error("Failed to send telemetry:", error)
-    }
 }
