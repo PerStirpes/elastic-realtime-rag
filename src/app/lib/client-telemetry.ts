@@ -6,7 +6,9 @@
  * and the server-side tracing infrastructure.
  */
 
+
 import { TokenUsage } from "../types"
+
 /**
  * Records token usage metrics from OpenAI response.done events
  */
@@ -302,4 +304,5 @@ async function sendTelemetry(payload: any) {
         body: JSON.stringify(payload),
     })
     console.log("one off failed", response)
+
 }

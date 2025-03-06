@@ -70,13 +70,17 @@ export function useRealtimeConnection({
                 if (
                     eventObj.type === "conversation.item.create" ||
                     eventObj.type === "response.cancel" ||
+
                     eventObj.type === "session.update" ||
                     eventObj.type === "session.update.after.transfer"
+
+
                 ) {
                     recordServerEvent(eventObj.type, {
                         itemType: eventObj.item?.type,
                         itemRole: eventObj.item?.role,
                         suffix: eventNameSuffix,
+
                         agent: eventObj.agent, // For tracking transfers
                     })
                 }
@@ -88,6 +92,7 @@ export function useRealtimeConnection({
                     updateSession(false);
                     return;
                 }
+
 
                 // Send the event via data channel
                 dcRef.current.send(JSON.stringify(eventObj))

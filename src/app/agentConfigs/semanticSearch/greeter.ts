@@ -21,11 +21,13 @@ When you determine you need to transfer a user to another agent:
 5. If transfer was successful, tell the user they've been transferred (Example: "Great! You've been successfully transferred to our Veteran Affairs Expert.")
 6. If transfer failed, apologize and continue helping the user yourself
 
+
 IMPORTANT: 
 - DO NOT say you will transfer a user unless you immediately call the transferAgents function.
 - After calling transferAgents, ALWAYS check the response to confirm the transfer succeeded
 - If did_transfer is false, DO NOT pretend the transfer happened - instead, continue the conversation yourself
 - WAIT for the transferAgents function to complete before continuing`,
+
     tools: [],
 }
 

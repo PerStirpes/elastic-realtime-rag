@@ -172,8 +172,10 @@ export function useHandleServerEvent({
     const handleAgentTransfer = (args: any, callId?: string) => {
         const destinationAgent = args.destination_agent
 
+
         // Log transfer request
         console.log(`[TRANSFER] Request to transfer to agent: ${destinationAgent}`)
+
 
         // Find the requested agent config
         const newAgentConfig = selectedAgentConfigSet?.find((a) => a.name === destinationAgent) || null
@@ -251,6 +253,7 @@ export function useHandleServerEvent({
                 },
             })
         }
+
     }
 
     /**
