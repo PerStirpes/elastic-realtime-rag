@@ -293,13 +293,20 @@ export async function recordCompleteDoneEvent(eventData: any) {
  * Sends telemetry data to the server endpoint
  */
 async function sendTelemetry(payload: any) {
-    // No logging of telemetry payloads
+    try {
+        const response = await fetch("/api/telemetry", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+        })
 
-    const response = await fetch("/api/telemetry", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-    })
+        // Log failure details if the response is not OK
+        if (!response.ok) {
+            console.warn("Telemetry request failed:", response.status, await response.text())
+        }
+    } catch (error) {
+        console.error("Error sending telemetry:", error)
+    }
 }
