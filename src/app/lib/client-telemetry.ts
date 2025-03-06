@@ -6,7 +6,6 @@
  * and the server-side tracing infrastructure.
  */
 
-
 import { TokenUsage } from "../types"
 
 /**
@@ -303,6 +302,4 @@ async function sendTelemetry(payload: any) {
         },
         body: JSON.stringify(payload),
     })
-    console.log("one off failed", response)
-
 }
