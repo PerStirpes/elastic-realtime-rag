@@ -89,9 +89,12 @@ export const sendEmailUtil = instrumentToolFunction(
  * This defines and adds "transferAgents" tool dynamically based on the specified downstreamAgents on each agent.
  */
 export function injectTransferTools(agentDefs: AgentConfig[]): AgentConfig[] {
+    console.log(`[TRANSFER-DEBUG] Starting injectTransferTools for ${agentDefs.length} agents`)
+    
     // Iterate over each agent definition
     agentDefs.forEach((agentDef) => {
         const downstreamAgents = agentDef.downstreamAgents || []
+        console.log(`[TRANSFER-DEBUG] Processing agent: ${agentDef.name} with ${downstreamAgents.length} downstream agents`)
 
         // Only proceed if there are downstream agents
         if (downstreamAgents.length > 0) {
@@ -99,6 +102,11 @@ export function injectTransferTools(agentDefs: AgentConfig[]): AgentConfig[] {
             const availableAgentsList = downstreamAgents
                 .map((dAgent) => `- ${dAgent.name}: ${dAgent.publicDescription ?? "No description"}`)
                 .join("\n")
+                
+            console.log(`[TRANSFER-DEBUG] Available transfer targets for ${agentDef.name}:`)
+            downstreamAgents.forEach(agent => {
+                console.log(`[TRANSFER-DEBUG]   - ${agent.name}`)
+            })
 
             // Create the transfer_agent tool specific to this agent
             const transferAgentTool: Tool = {
@@ -110,6 +118,8 @@ export function injectTransferTools(agentDefs: AgentConfig[]): AgentConfig[] {
   
   Available Agents:
   ${availableAgentsList}
+  
+  IMPORTANT: After calling this function, wait for the response and check if did_transfer is true before proceeding.
         `,
                 parameters: {
                     type: "object",
@@ -141,6 +151,9 @@ export function injectTransferTools(agentDefs: AgentConfig[]): AgentConfig[] {
 
             // Add the newly created tool to the current agent's tools
             agentDef.tools.push(transferAgentTool)
+            console.log(`[TRANSFER-DEBUG] Added transferAgents tool to ${agentDef.name}`)
+        } else {
+            console.log(`[TRANSFER-DEBUG] No downstream agents for ${agentDef.name}, skipping transfer tool`)
         }
 
         // so .stringify doesn't break with circular dependencies
@@ -155,5 +168,6 @@ export function injectTransferTools(agentDefs: AgentConfig[]): AgentConfig[] {
         }
     })
 
+    console.log(`[TRANSFER-DEBUG] Completed injectTransferTools`)
     return agentDefs
 }

@@ -70,13 +70,23 @@ export function useRealtimeConnection({
                 if (
                     eventObj.type === "conversation.item.create" ||
                     eventObj.type === "response.cancel" ||
-                    eventObj.type === "session.update"
+                    eventObj.type === "session.update" ||
+                    eventObj.type === "session.update.after.transfer"
                 ) {
                     recordServerEvent(eventObj.type, {
                         itemType: eventObj.item?.type,
                         itemRole: eventObj.item?.role,
                         suffix: eventNameSuffix,
+                        agent: eventObj.agent, // For tracking transfers
                     })
+                }
+
+                // Special handling for post-transfer session updates
+                if (eventObj.type === "session.update.after.transfer") {
+                    console.log(`[TRANSFER] Triggering session update after transfer to: ${eventObj.agent}`);
+                    // Convert to a regular session update
+                    updateSession(false);
+                    return;
                 }
 
                 // Send the event via data channel
@@ -285,13 +295,29 @@ export function useRealtimeConnection({
     // Update session configuration
     const updateSession = (shouldTriggerResponse: boolean = false) => {
         updateSessionCounterRef.current++
-        console.log(`updateSession with agent: ${selectedAgentName}, trigger: ${shouldTriggerResponse}`)
+        console.log(`[SESSION] updateSession with agent: ${selectedAgentName}, trigger: ${shouldTriggerResponse}`)
         sendClientEvent({ type: "input_audio_buffer.clear" }, "clear audio buffer on session update")
 
         const currentAgent = selectedAgentConfigSet?.find((a) => a.name === selectedAgentName)
         if (!currentAgent) {
-            console.error(`Cannot find agent config for ${selectedAgentName}`)
+            console.error(`[SESSION] Cannot find agent config for ${selectedAgentName}`)
+            console.log(`[SESSION] Available agents: ${selectedAgentConfigSet?.map(a => a.name).join(', ')}`)
             return
+        }
+
+        console.log(`[SESSION] Found agent config for ${selectedAgentName}`)
+        console.log(`[SESSION] Agent has ${currentAgent.tools?.length || 0} tools`)
+        
+        if (currentAgent.tools) {
+            const hasTransferTool = currentAgent.tools.some(tool => tool.name === "transferAgents")
+            console.log(`[SESSION] Agent has transferAgents tool: ${hasTransferTool}`)
+            
+            if (hasTransferTool) {
+                const transferTool = currentAgent.tools.find(tool => tool.name === "transferAgents")
+                if (transferTool && transferTool.parameters?.properties?.destination_agent?.enum) {
+                    console.log(`[SESSION] Transfer targets: ${transferTool.parameters.properties.destination_agent.enum.join(', ')}`)
+                }
+            }
         }
 
         const turnDetection = isPTTActive
@@ -322,9 +348,14 @@ export function useRealtimeConnection({
             },
         }
 
+        console.log(`[SESSION] Sending session update for ${selectedAgentName}`)
         sendClientEvent(sessionUpdateEvent)
+        
         if (shouldTriggerResponse) {
+            console.log(`[SESSION] Triggering initial response for ${selectedAgentName}`)
             sendSimulatedUserMessage("hi")
+        } else {
+            console.log(`[SESSION] Session updated for ${selectedAgentName} without triggering response`)
         }
     }
 
