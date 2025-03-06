@@ -3,7 +3,7 @@ import vaAgent from "./vaAgent"
 import elasticExpert from "./elasticBlogsAgent"
 import medicareAgent from "./medicareAgent"
 import irsAgent from "./irsAgent"
-import { injectTransferTools } from "../utils"
+import { injectTransferTools } from "../utility"
 
 greeter.downstreamAgents = [vaAgent, elasticExpert, medicareAgent, irsAgent]
 vaAgent.downstreamAgents = [elasticExpert, medicareAgent, greeter, irsAgent]

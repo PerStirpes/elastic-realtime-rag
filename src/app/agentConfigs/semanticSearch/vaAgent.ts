@@ -1,5 +1,5 @@
 import { AgentConfig } from "@/app/types"
-import { sendEmailUtil, elasticSearchUtil } from "../utils"
+import { sendEmailUtil, elasticSearchUtil } from "../utility"
 
 const vaAgent: AgentConfig = {
     name: "Veteran Affairs Expert",
@@ -69,10 +69,10 @@ const vaAgent: AgentConfig = {
     ],
     toolLogic: {
         searchVA: async ({ query }: { query: string }) => {
-            return elasticSearchUtil(query, "va", "VAExpert");
+            return elasticSearchUtil(query, "va", "VAExpert")
         },
         sendEmail: async (email, transcriptLogs) => {
-            return sendEmailUtil(email, transcriptLogs, "VAExpert");
+            return sendEmailUtil(email, transcriptLogs, "VAExpert")
         },
     },
 }

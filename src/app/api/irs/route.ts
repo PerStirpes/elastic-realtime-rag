@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { esClient, SearchResult, extractBodyContentAndUrls } from "../utlis"
+import { esClient, SearchResult, extractBodyContentAndUrls } from "../utility"
 
 export async function GET(request: NextRequest) {
     try {
