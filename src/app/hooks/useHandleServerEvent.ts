@@ -350,7 +350,7 @@ export function useHandleServerEvent({
             const checkFsAndSetApm = () => {
                 if (window.FS && transaction) {
                     const fsUrl = window.FS("getSession", { format: "url" })
-                    console.log("transaction", JSON.stringify(transaction, null, 2))
+
                     if (fsUrl) {
                         transaction.addLabels({ fullstory_session_url: fsUrl })
                         window.FS("setIdentity", {

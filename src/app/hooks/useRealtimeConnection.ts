@@ -276,8 +276,6 @@ export function useRealtimeConnection({
     // Function to send simulated user message
     const sendSimulatedUserMessage = (text: string) => {
         const id = uuidv4().slice(0, 32)
-        //todo remove this console.log after test
-        console.log(`[SIMULATED] Sending simulated user message id: ${id}`)
         addTranscriptMessage(id, "user", text, true)
 
         sendClientEvent(
