@@ -172,10 +172,8 @@ export function useHandleServerEvent({
     const handleAgentTransfer = (args: any, callId?: string) => {
         const destinationAgent = args.destination_agent
 
-
         // Log transfer request
         console.log(`[TRANSFER] Request to transfer to agent: ${destinationAgent}`)
-
 
         // Find the requested agent config
         const newAgentConfig = selectedAgentConfigSet?.find((a) => a.name === destinationAgent) || null
@@ -184,42 +182,45 @@ export function useHandleServerEvent({
         const transferSuccessful = !!newAgentConfig
         if (transferSuccessful) {
             console.log(`[TRANSFER] Found destination agent config: ${destinationAgent}`)
-            
+
             // Log current state before transfer
             console.log(`[TRANSFER] Current agent: ${selectedAgentName}`)
-            
+
             // Store current agent for verification
             const previousAgent = selectedAgentName
-            
+
             // Execute transfer
             setSelectedAgentName(destinationAgent)
             console.log(`[TRANSFER] Transfer executed to: ${destinationAgent}`)
-            
+
             // Use setTimeout to verify the transfer completed
             setTimeout(() => {
                 // This will run after React state updates have been processed
                 console.log(`[TRANSFER] Verification - Previous: ${previousAgent}, Current: ${selectedAgentName}`)
-                
+
                 const verifiedSuccess = selectedAgentName === destinationAgent
-                console.log(`[TRANSFER] Verification ${verifiedSuccess ? 'SUCCESS' : 'FAILED'}`)
-                
+                console.log(`[TRANSFER] Verification ${verifiedSuccess ? "SUCCESS" : "FAILED"}`)
+
                 // Trigger session update to configure the new agent's tools and settings
                 if (verifiedSuccess) {
-                    sendClientEvent({ 
-                        type: "session.update.after.transfer",
-                        agent: destinationAgent
-                    }, "Trigger session update after transfer")
+                    sendClientEvent(
+                        {
+                            type: "session.update.after.transfer",
+                            agent: destinationAgent,
+                        },
+                        "Trigger session update after transfer",
+                    )
                 }
-                
+
                 // Send result back to AI with verified status
                 const transferResult = {
                     destination_agent: destinationAgent,
                     did_transfer: verifiedSuccess,
-                    verified: true
+                    verified: true,
                 }
-                
+
                 addTranscriptBreadcrumb(`Transfer to ${destinationAgent}`, transferResult)
-                
+
                 sendClientEvent({
                     type: "conversation.item.create",
                     item: {
@@ -229,21 +230,21 @@ export function useHandleServerEvent({
                     },
                 })
             }, 100) // Small delay to allow React state to update
-            
+
             return // Early return to prevent immediate response
         } else {
             console.error(`[TRANSFER] FAILED - agent not found: ${destinationAgent}`)
-            console.log(`[TRANSFER] Available agents: ${selectedAgentConfigSet?.map(a => a.name).join(', ')}`)
-            
+            console.log(`[TRANSFER] Available agents: ${selectedAgentConfigSet?.map((a) => a.name).join(", ")}`)
+
             // Prepare failure response
             const transferResult = {
                 destination_agent: destinationAgent,
                 did_transfer: false,
-                reason: "Agent not found"
+                reason: "Agent not found",
             }
-            
+
             addTranscriptBreadcrumb(`Transfer to ${destinationAgent} failed`, transferResult)
-            
+
             sendClientEvent({
                 type: "conversation.item.create",
                 item: {
@@ -253,7 +254,6 @@ export function useHandleServerEvent({
                 },
             })
         }
-
     }
 
     /**
@@ -333,6 +333,42 @@ export function useHandleServerEvent({
         if (event.session?.id) {
             setSessionStatus("CONNECTED")
             addTranscriptBreadcrumb(`Session ID: ${event.session.id}\nStarted at: ${new Date().toLocaleString()}`)
+            let emDashUID = localStorage.getItem("emDashUID")
+            if (!emDashUID) {
+                emDashUID = crypto.randomUUID()
+                localStorage.setItem("emDashUID", emDashUID)
+            }
+
+            const transaction = window.elasticApm?.getCurrentTransaction()
+            if (transaction) {
+                transaction.addLabels({
+                    chat_Session_ID: event.session.id,
+                    emDashUID: emDashUID,
+                })
+            }
+
+            const checkFsAndSetApm = () => {
+                if (window.FS && transaction) {
+                    const fsUrl = window.FS("getSession", { format: "url" })
+                    console.log("transaction", JSON.stringify(transaction, null, 2))
+                    if (fsUrl) {
+                        transaction.addLabels({ fullstory_session_url: fsUrl })
+                        window.FS("setIdentity", {
+                            uid: emDashUID,
+                            properties: {
+                                chat_Session_ID: event.session.id,
+                            },
+                        })
+                    } else {
+                        console.warn("FullStory session URL not yet available.")
+                        setTimeout(checkFsAndSetApm, 500)
+                    }
+                } else {
+                    setTimeout(checkFsAndSetApm, 500)
+                }
+            }
+
+            checkFsAndSetApm()
         }
     }
 
@@ -358,7 +394,7 @@ export function useHandleServerEvent({
             if (role === "user") {
                 cancelAssistantSpeech()
             }
-            
+
             // Add to transcript
             addTranscriptMessage(itemId, role, displayText)
         }
@@ -405,7 +441,7 @@ export function useHandleServerEvent({
         if (event.response) {
             // Record enhanced response details (high-level metadata)
             recordResponseDoneDetails(event.response)
-            
+
             // Record token usage if available
             if (event.response.usage) {
                 recordTokenUsage(event.response.usage as any, event.response.voice)
