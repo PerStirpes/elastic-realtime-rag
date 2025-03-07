@@ -13,7 +13,8 @@ import os from "os"
 const logRecordProcessor = new BatchLogRecordProcessor(new OTLPLogExporter())
 
 const metricReader = new PeriodicExportingMetricReader({
-    exporter: new OTLPMetricExporter(),
+    exportIntervalMillis: 60000,
+    exporter: new OTLPMetricExporter({ timeoutMillis: 30000 }),
 })
 
 const sdk = new NodeSDK({
