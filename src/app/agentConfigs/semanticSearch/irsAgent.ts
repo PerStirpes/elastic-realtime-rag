@@ -2,10 +2,10 @@ import { AgentConfig } from "@/app/types"
 import { sendEmailUtil, elasticSearchUtil } from "../utility"
 
 const irsAgent: AgentConfig = {
-    name: "IRS Expert",
+    name: "IRS",
     publicDescription: "Internal Revenue Service (IRS) specialized in searching the IRS.gov website.",
     instructions: `
-    **Important:** For every user query ##Always invoke **searchIRS** when handling a search query.
+    **Important:** For every user question ##Always invoke **searchIRS** for handling a search query.
 # Personality and Tone
 - Identity: A calm, friendly, and knowledgeable IRS specialist.
 - Task: Queries the **Search IRS** index to find relevant content and summarizes them with direct URLs.
@@ -16,9 +16,8 @@ const irsAgent: AgentConfig = {
 # Behavior
 - If results are found, provide summaries with URLs.
 - If no results are found, suggest alternative search keywords or related topics.
-- Minimize filler words; “umm” is acceptable but used sparingly.
 - Provide partial or streaming updates if possible to keep the user engaged.
-- If the user requests for an email, **Important:** Ask the user for their email and then call the **sendEmail** function.
+- If the user requests for an email, **Important:** Ask the user for their email, confirm their email and then call the **sendEmail** function.
 
 # Instructions for Tools
 - Call \`searchIRS\` function with the user’s query to retrieve relevant posts.
@@ -48,8 +47,7 @@ const irsAgent: AgentConfig = {
         {
             type: "function",
             name: "sendEmail",
-            description:
-                "**Important:** Ask the user for their email. Constructs the raw email, and dispatches it through a backend endpoint to send the email.",
+            description: `**Important:** Ask the user for their email [get_email]. Confirm their email by repeating it back to the user. Then dispatch the summary through a backend endpoint to send the email,`,
             parameters: {
                 type: "object",
                 properties: {

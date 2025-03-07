@@ -2,7 +2,7 @@ import { AgentConfig } from "@/app/types"
 import { sendEmailUtil, elasticSearchUtil } from "../utility"
 
 const medicareAgent: AgentConfig = {
-    name: "Medicare Expert",
+    name: "Medicare",
     publicDescription: "Medicare expert specialized in searching the medicare.gov website.",
     instructions: `
       **Important:** For every user query ##Always invoke **searchMedicare** when handling a search query.

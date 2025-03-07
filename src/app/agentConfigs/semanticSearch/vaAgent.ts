@@ -2,7 +2,7 @@ import { AgentConfig } from "@/app/types"
 import { sendEmailUtil, elasticSearchUtil } from "../utility"
 
 const vaAgent: AgentConfig = {
-    name: "Veteran Affairs Expert",
+    name: "VA",
     publicDescription: "Veterans Affairs (VA) Service specialized in searching the VA.gov website.",
     instructions: `
     **Important:** For every user query ##Always invoke **searchVA** when handling a search query.
@@ -24,7 +24,7 @@ const vaAgent: AgentConfig = {
 - Call \`searchVA\` function with the user’s query to retrieve relevant posts.
 - If the search returns results, summarize the content.
 - If no results, gently recommend alternative queries or additional filters.
-- If the user is satisfied with the results, ask the user for their email and then call \`sendEmail\` to send the results to the user. 
+- If the user is satisfied with the results, ask the user for their email and then call \`sendEmail\` to send the results to the user.
   `,
     tools: [
         {

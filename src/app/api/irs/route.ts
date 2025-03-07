@@ -51,11 +51,11 @@ export async function GET(request: NextRequest) {
                             },
                         },
                     ],
-                    rank_window_size: 5,
+                    rank_window_size: 2,
                     rank_constant: 1,
                 },
             },
-            size: 3,
+            size: 2,
             fields: ["title", "body_content", "additional_urls"],
         }
 

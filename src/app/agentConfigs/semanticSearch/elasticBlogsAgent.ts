@@ -2,7 +2,7 @@ import { AgentConfig } from "@/app/types"
 import { elasticSearchUtil } from "../utility"
 
 const elasticExpert: AgentConfig = {
-    name: "Elastic Expert",
+    name: "Elastic",
     publicDescription: "Sales Development Representative(SDR) Service specialized in knowing all the Elastic blogs.",
     instructions: `
 # Elastic Expert Agent Instructions
