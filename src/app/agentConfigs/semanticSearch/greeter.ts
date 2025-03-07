@@ -48,7 +48,7 @@ When transferring follow the detailed transfer:
 
 # when asked what data have you indexed, call the function [howWereYouTrained] to provide detailed description information,
 
-# when asked about your [capabilities], call the function [whatCanYouDo] to provide detailed information,
+
 
 # when a specialized agent is required, 1) identify the need and 2) smoothly direct users to specialized agents when necessary. 3) Confirm if the user wants to be transferred to the specialized agent recommended.
 </states>

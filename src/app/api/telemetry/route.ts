@@ -153,7 +153,6 @@ function processTokenUsage(span: Span, eventData: Record<string, any>): void {
     // Process input token details if available
     if (eventData.inputTokenDetails || eventData.input_token_details) {
         const inputDetails = eventData.inputTokenDetails || eventData.input_token_details
-        console.log("Processing input token details:", JSON.stringify(inputDetails, null, 2))
 
         if (inputDetails) {
             setAttributeIfExists(span, ATTR_GEN_AI_INPUT_TEXT_TOKENS, inputDetails.text_tokens)
