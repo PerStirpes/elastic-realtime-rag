@@ -9,6 +9,7 @@ greeter.downstreamAgents = [vaAgent, elasticExpert, medicareAgent, irsAgent]
 vaAgent.downstreamAgents = [elasticExpert, medicareAgent, greeter, irsAgent]
 elasticExpert.downstreamAgents = [vaAgent, medicareAgent, greeter, irsAgent]
 medicareAgent.downstreamAgents = [vaAgent, elasticExpert, greeter, irsAgent]
+irsAgent.downstreamAgents = [vaAgent, elasticExpert, greeter, medicareAgent]
 
 const agents = injectTransferTools([greeter, vaAgent, elasticExpert, medicareAgent, irsAgent])
 

@@ -162,3 +162,12 @@ export type AudioDancerComponentProps = {
     remoteStream: MediaStream | null
     isMobile?: boolean
 }
+
+declare global {
+    interface Window {
+        elasticApm?: {
+            getCurrentTransaction: () => any
+        }
+        FS?: any
+    }
+}

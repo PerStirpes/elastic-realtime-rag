@@ -342,7 +342,7 @@ export function useHandleServerEvent({
             const transaction = window.elasticApm?.getCurrentTransaction()
             if (transaction) {
                 transaction.addLabels({
-                    chat_Session_ID: event.session.id,
+                    chat_Session_ID: event.session?.id,
                     emDashUID: emDashUID,
                 })
             }
@@ -356,7 +356,7 @@ export function useHandleServerEvent({
                         window.FS("setIdentity", {
                             uid: emDashUID,
                             properties: {
-                                chat_Session_ID: event.session.id,
+                                chat_Session_ID: event.session?.id,
                             },
                         })
                     } else {
