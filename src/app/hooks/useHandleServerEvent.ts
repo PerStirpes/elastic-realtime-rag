@@ -170,6 +170,7 @@ export function useHandleServerEvent({
      * Handle agent transfer requests
      */
     const handleAgentTransfer = (args: any, callId?: string) => {
+        //todo find the bug and squash it
         const destinationAgent = args.destination_agent
 
         // Log transfer request
