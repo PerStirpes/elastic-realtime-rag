@@ -85,6 +85,7 @@ export function useHandleServerEvent({
                 console.log("No active audio buffers to cancel")
             }
         } catch (error) {
+            window.elasticApm?.captureError(`Error in cancelAssistantSpeech ${error}`)
             console.warn("Error in cancelAssistantSpeech:", error)
         }
     }
@@ -94,7 +95,7 @@ export function useHandleServerEvent({
      */
     const handleFunctionError = (error: any, callId?: string, name?: string) => {
         console.error("Function call error:", error)
-
+        window.elasticApm?.captureError(`Function call error: ${error}`)
         addTranscriptBreadcrumb(`Error during function call: ${name}`, { error })
 
         // Record tool call failure
@@ -162,6 +163,7 @@ export function useHandleServerEvent({
             // Trigger AI to continue processing
             sendClientEvent({ type: "response.create" })
         } catch (error) {
+            window.elasticApm?.captureError(`Error in executeAgentTool ${error}`)
             handleFunctionError(error, callId, name)
         }
     }
@@ -234,6 +236,7 @@ export function useHandleServerEvent({
 
             return // Early return to prevent immediate response
         } else {
+            window.elasticApm?.captureError(`Error in handleAgentTransfer ${destinationAgent}`)
             console.error(`[TRANSFER] FAILED - agent not found: ${destinationAgent}`)
             console.log(`[TRANSFER] Available agents: ${selectedAgentConfigSet?.map((a) => a.name).join(", ")}`)
 
@@ -324,6 +327,7 @@ export function useHandleServerEvent({
         } catch (error) {
             // Handle any other execution errors
             handleFunctionError(error, call_id, name)
+            window.elasticApm?.captureError(`  Error in handleFunctionCall ${error}`)
         }
     }
 

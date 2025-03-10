@@ -20,6 +20,8 @@ function Loading() {
 
 // Error Fallback component
 function ErrorFallback({ error }: { error: Error }) {
+    window.elasticApm?.captureError(error)
+    console.log("error boundary: ", error)
     return (
         <div role="alert">
             <p>Something went wrong:</p>

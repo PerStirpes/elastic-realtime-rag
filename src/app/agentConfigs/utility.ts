@@ -18,6 +18,7 @@ export const elasticSearchUtil = instrumentToolFunction(
             })
 
             if (!response.ok) {
+                window.elasticApm?.captureError(`Error from server when searching ${endpoint}: ${response}:`)
                 console.error(`Error from server when searching ${endpoint}:`, response)
                 return { error: `Server error while searching ${endpoint} data.` }
             }
@@ -26,12 +27,13 @@ export const elasticSearchUtil = instrumentToolFunction(
             return { result: completion }
         } catch (error) {
             console.error(`[${agentName}] search${endpoint} encountered an error:`, error)
+            window.elasticApm?.captureError(`[${agentName}] search${endpoint} encountered an error: ${error}`)
             return {
                 error: `An unexpected error occurred while searching ${endpoint} data.`,
                 results: [],
             }
         }
-    }
+    },
 )
 
 /**
@@ -71,6 +73,7 @@ export const sendEmailUtil = instrumentToolFunction(
 
             if (!response.ok) {
                 console.error("Error from server:", response)
+                window.elasticApm?.captureError(`Error from server when sending email: ${response}:`)
                 return { error: "Server error while sending email." }
             }
 
@@ -79,22 +82,24 @@ export const sendEmailUtil = instrumentToolFunction(
             return { result }
         } catch (error) {
             console.error(`[${agentName}] sendEmail encountered an error:`, error)
+            window.elasticApm?.captureError(`[${agentName}] sendEmail encountered an error: ${error}`)
             return { error: "An unexpected error occurred while sending the email." }
         }
-    }
+    },
 )
-
 
 /**
  * This defines and adds "transferAgents" tool dynamically based on the specified downstreamAgents on each agent.
  */
 export function injectTransferTools(agentDefs: AgentConfig[]): AgentConfig[] {
     console.log(`[TRANSFER-DEBUG] Starting injectTransferTools for ${agentDefs.length} agents`)
-    
+
     // Iterate over each agent definition
     agentDefs.forEach((agentDef) => {
         const downstreamAgents = agentDef.downstreamAgents || []
-        console.log(`[TRANSFER-DEBUG] Processing agent: ${agentDef.name} with ${downstreamAgents.length} downstream agents`)
+        console.log(
+            `[TRANSFER-DEBUG] Processing agent: ${agentDef.name} with ${downstreamAgents.length} downstream agents`,
+        )
 
         // Only proceed if there are downstream agents
         if (downstreamAgents.length > 0) {
@@ -102,9 +107,9 @@ export function injectTransferTools(agentDefs: AgentConfig[]): AgentConfig[] {
             const availableAgentsList = downstreamAgents
                 .map((dAgent) => `- ${dAgent.name}: ${dAgent.publicDescription ?? "No description"}`)
                 .join("\n")
-                
+
             console.log(`[TRANSFER-DEBUG] Available transfer targets for ${agentDef.name}:`)
-            downstreamAgents.forEach(agent => {
+            downstreamAgents.forEach((agent) => {
                 console.log(`[TRANSFER-DEBUG]   - ${agent.name}`)
             })
 
@@ -161,9 +166,9 @@ export function injectTransferTools(agentDefs: AgentConfig[]): AgentConfig[] {
             name,
             publicDescription,
         }))
-        
+
         // Instrument the toolLogic if it exists
-        if (agentDef.toolLogic && typeof agentDef.toolLogic === 'object') {
+        if (agentDef.toolLogic && typeof agentDef.toolLogic === "object") {
             agentDef.toolLogic = instrumentToolLogic(agentDef.toolLogic)
         }
     })
