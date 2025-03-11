@@ -44,5 +44,3 @@ export default function RootLayout({
         </html>
     )
 }
-
-// serviceVersion: '${process.env.APP_VERSION || "unknown"}'
