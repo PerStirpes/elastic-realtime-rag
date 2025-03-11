@@ -196,12 +196,11 @@ export function useRealtimeConnection({
             setDataChannel(dc)
         } catch (err) {
             console.error("Error connecting to realtime:", err)
-            const transaction = window.elasticApm?.getCurrentTransaction()
-            console.log("Transaction:", transaction)
-            // const fsUrl = window.FS("getSession", { format: "url.now" })
 
-            window.elasticApm?.captureError(`Error connecting to realtime: ${err}`)
-            // window.elasticApm?.captureError(`fullstory_url: ${fsUrl}`)
+            const fsUrl = window.FS("getSession", { format: "url.now" })
+
+            window.elasticApm?.captureError(`Error connecting to realtime: ${err} - fullstory_url: ${fsUrl}`)
+            window.alert("This app needs access to your microphone, Please enable you microphone")
 
             setSessionStatus("DISCONNECTED")
         }
