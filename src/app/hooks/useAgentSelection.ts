@@ -36,7 +36,7 @@ export function useAgentSelection() {
     )
 
     useEffect(() => {
-        let finalAgentConfig = searchParams.get("agentConfig")
+        let finalAgentConfig = searchParams?.get("agentConfig")
         if (!finalAgentConfig || !allAgentSets[finalAgentConfig]) {
             finalAgentConfig = defaultAgentSetKey
             const url = new URL(window.location.toString())
@@ -68,7 +68,7 @@ export function useAgentSelection() {
         setSelectedAgentName(newAgentName)
     }
 
-    const agentSetKey = searchParams.get("agentConfig") || "default"
+    const agentSetKey = searchParams?.get("agentConfig") || "default"
 
     return {
         selectedAgentName,

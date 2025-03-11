@@ -198,10 +198,10 @@ export function useRealtimeConnection({
             console.error("Error connecting to realtime:", err)
             const transaction = window.elasticApm?.getCurrentTransaction()
             console.log("Transaction:", transaction)
-            const fsUrl = window.FS("getSession", { format: "url.now" })
+            // const fsUrl = window.FS("getSession", { format: "url.now" })
 
             window.elasticApm?.captureError(`Error connecting to realtime: ${err}`)
-            window.elasticApm?.captureError(`fullstory_url: ${fsUrl}`)
+            // window.elasticApm?.captureError(`fullstory_url: ${fsUrl}`)
 
             setSessionStatus("DISCONNECTED")
         }
