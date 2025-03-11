@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
         })
     } catch (error) {
         console.error("Elasticsearch search error:", error)
+        window.elasticApm?.captureError(error)
         return NextResponse.json(
             {
                 error: "Failed to perform search",

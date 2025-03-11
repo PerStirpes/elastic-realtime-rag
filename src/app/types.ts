@@ -167,6 +167,7 @@ declare global {
     interface Window {
         elasticApm?: {
             getCurrentTransaction: () => any
+            captureError: (error: any) => void
         }
         FS?: any
     }

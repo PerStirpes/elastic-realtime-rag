@@ -93,12 +93,14 @@ export function useRealtimeConnection({
                 // Send the event via data channel
                 dcRef.current.send(JSON.stringify(eventObj))
             } catch (error) {
+                window.elasticApm?.captureError(`Failed to send message: ${error}`)
                 console.error("Failed to send message", error)
             }
         } else {
             logClientEvent({ attemptedEvent: eventObj.type }, "error.data_channel_not_open")
             console.log("Failed to send message - data channel not open", eventObj.type)
             console.error("Failed to send message - no data channel available", eventObj)
+            window.elasticApm?.captureError(`Failed to send message - no data channel available: ${eventObj.type}`)
         }
     }
 
@@ -112,6 +114,7 @@ export function useRealtimeConnection({
         if (!data.client_secret?.value) {
             logClientEvent(data, "error.no_ephemeral_key")
             console.error("No ephemeral key provided by the server")
+            window.elasticApm?.captureError(`No ephemeral key provided by the server`)
             setSessionStatus("DISCONNECTED")
             return null
         }
@@ -169,6 +172,7 @@ export function useRealtimeConnection({
 
             const handleError = (err: any) => {
                 logClientEvent({ error: err }, "data_channel.error")
+                window.elasticApm?.captureError(`  Data channel error: ${err}`)
             }
 
             const handleMessage = (e: MessageEvent) => {
@@ -192,6 +196,12 @@ export function useRealtimeConnection({
             setDataChannel(dc)
         } catch (err) {
             console.error("Error connecting to realtime:", err)
+
+            const fsUrl = window.FS("getSession", { format: "url.now" })
+
+            window.elasticApm?.captureError(`Error connecting to realtime: ${err} - fullstory_url: ${fsUrl}`)
+            window.alert("This app needs access to your microphone, Please enable you microphone")
+
             setSessionStatus("DISCONNECTED")
         }
     }
@@ -237,6 +247,7 @@ export function useRealtimeConnection({
             logClientEvent({}, "disconnected")
         } catch (error) {
             console.error("Error in disconnectFromRealtime:", error)
+            window.elasticApm?.captureError(`Error in disconnectFromRealtime: ${error}`)
         }
     }
 
@@ -302,6 +313,7 @@ export function useRealtimeConnection({
         const currentAgent = selectedAgentConfigSet?.find((a) => a.name === selectedAgentName)
         if (!currentAgent) {
             console.error(`[SESSION] Cannot find agent config for ${selectedAgentName}`)
+            window.elasticApm?.captureError(`Cannot find agent config for ${selectedAgentName}`)
             console.log(`[SESSION] Available agents: ${selectedAgentConfigSet?.map((a) => a.name).join(", ")}`)
             return
         }
@@ -389,10 +401,12 @@ export function useRealtimeConnection({
                     sendClientEvent({ type: "response.cancel" }, "(cancel due to user interruption)")
                 } catch (error) {
                     console.warn("Error in delayed response.cancel:", error)
+                    window.elasticApm?.captureError(`Error in delayed response.cancel: ${error}`)
                 }
             }, 50)
         } catch (error) {
             console.warn("Error in cancelAssistantSpeech:", error)
+            window.elasticApm?.captureError(`Error in cancelAssistantSpeech: ${error}`)
         }
     }
 

@@ -38,5 +38,56 @@ const esClient = new Client({
     auth: { apiKey: esApiKey },
 })
 
+async function collectWebRTCStats(peerConnection: { getStats: () => any }) {
+    const stats = await peerConnection.getStats()
+    const statsReport: {
+        type: any
+        timestamp: any
+        packetsLost: any
+        jitter: any
+        roundTripTime: any
+        bitrate: any
+    }[] = []
+
+    stats.forEach(
+        (report: {
+            type: string
+            timestamp: any
+            packetsLost: any
+            jitter: any
+            roundTripTime: any
+            bytesSent: any
+            bytesReceived: any
+        }) => {
+            if (report.type === "inbound-rtp" || report.type === "outbound-rtp") {
+                statsReport.push({
+                    type: report.type,
+                    timestamp: report.timestamp,
+                    packetsLost: report.packetsLost,
+                    jitter: report.jitter,
+                    roundTripTime: report.roundTripTime,
+                    bitrate: report.bytesSent || report.bytesReceived,
+                })
+            }
+        },
+    )
+    try {
+        console.log("Sending statsReport:", statsReport)
+        const response = await fetch("/api/webrtc", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stats: statsReport }),
+        })
+
+        // Log failure details if the response is not OK
+        if (!response.ok) {
+            console.warn("Telemetry request failed:", response.status, await response.text())
+        }
+    } catch (error) {
+        console.error("Error sending telemetry:", error)
+    }
+    return statsReport
+}
+
 export type { SearchResult }
-export { esClient, extractBodyContentAndUrls }
+export { esClient, extractBodyContentAndUrls, collectWebRTCStats }

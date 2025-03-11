@@ -46,6 +46,7 @@ export async function createRealtimeConnection(
         recordRealtimeFetch(url, method, statusCode, undefined, model)
 
         if (!sdpResponse.ok) {
+            window.elasticApm?.captureError(`HTTP error! status: ${sdpResponse.status}`)
             throw new Error(`HTTP error! status: ${sdpResponse.status}`)
         }
     } catch (err) {
@@ -54,7 +55,7 @@ export async function createRealtimeConnection(
 
         // Record failed fetch
         recordRealtimeFetch(url, method, statusCode, error, model)
-
+        window.elasticApm?.captureError(error)
         // Re-throw the error
         throw err
     }

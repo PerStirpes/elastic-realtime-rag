@@ -20,7 +20,7 @@ export const EventProvider: FC<PropsWithChildren> = ({ children }) => {
         const id = eventData.event_id || uuidv4()
 
         if (eventName === "response.audio_transcript.delta" || eventName === "response.function_call_arguments.delta") {
-            console.log("Skipping logging of response.audio_transcript.delta event")
+            // console.log("Skipping logging of response.audio_transcript.delta event")
         }
 
         setLoggedEvents((prev) => {
@@ -63,6 +63,7 @@ export const EventProvider: FC<PropsWithChildren> = ({ children }) => {
 export function useEvent() {
     const context = useContext(EventContext)
     if (!context) {
+        window.elasticApm?.captureError("useEvent must be used within an EventProvider")
         throw new Error("useEvent must be used within an EventProvider")
     }
     return context

@@ -1,4 +1,3 @@
-// Don't even brother trying to implement otel comment out this code
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-grpc"
 import { NodeSDK } from "@opentelemetry/sdk-node"
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-node"

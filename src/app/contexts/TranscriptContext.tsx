@@ -123,6 +123,7 @@ export const TranscriptProvider: FC<PropsWithChildren> = ({ children }) => {
 export function useTranscript() {
     const context = useContext(TranscriptContext)
     if (!context) {
+        window.elasticApm?.captureError("useTranscript must be used within a TranscriptProvider")
         throw new Error("useTranscript must be used within a TranscriptProvider")
     }
     return context
