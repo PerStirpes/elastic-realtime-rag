@@ -1,16 +1,5 @@
-import { Client } from "@elastic/elasticsearch"
 import { NextRequest, NextResponse } from "next/server"
-
-const esNode = process.env.ELASTICSEARCH_SERVERLESS_URL
-const esApiKey = process.env.ELASTICSEARCH_SERVERLESS_API_KEY
-
-if (!esNode || !esApiKey) {
-    throw new Error("Elasticsearch serverless variables are not set.")
-}
-const esClient = new Client({
-    node: esNode,
-    auth: { apiKey: esApiKey },
-})
+import { esClient } from "../utility"
 
 export async function GET(request: NextRequest) {
     try {

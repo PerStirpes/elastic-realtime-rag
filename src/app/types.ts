@@ -166,9 +166,19 @@ export type AudioDancerComponentProps = {
 declare global {
     interface Window {
         elasticApm?: {
+            init: (config: Record<string, any>) => void
+            startTransaction: (name: string, type: string, options?: any) => any
+            addLabels: (labels: Record<string, string | number | boolean>) => void
+            setUserContext: (user: Record<string, any>) => void
+            setCustomContext: (context: Record<string, any>) => void
+            addFilter: (fn: (payload: any) => any) => void
             getCurrentTransaction: () => any
-            captureError: (error: any) => void
+            captureError: (error: Error | string, options?: any) => void
         }
         FS?: any
+        _fs_host?: string
+        _fs_script?: string
+        _fs_org?: string
+        _fs_namespace?: string
     }
 }

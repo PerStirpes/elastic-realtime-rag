@@ -12,6 +12,7 @@ import {
     recordFullTranscript,
     recordUserTranscript,
 } from "@/app/lib/client-telemetry"
+import { captureError } from "../lib/apm-rum"
 
 /**
  * Custom hook to handle server events from the WebRTC data channel
@@ -85,7 +86,7 @@ export function useHandleServerEvent({
                 console.log("No active audio buffers to cancel")
             }
         } catch (error) {
-            window.elasticApm?.captureError(`Error in cancelAssistantSpeech ${error}`)
+            captureError(`Error in cancelAssistantSpeech ${error}`)
             console.warn("Error in cancelAssistantSpeech:", error)
         }
     }
@@ -95,7 +96,7 @@ export function useHandleServerEvent({
      */
     const handleFunctionError = (error: any, callId?: string, name?: string) => {
         console.error("Function call error:", error)
-        window.elasticApm?.captureError(`Function call error: ${error}`)
+        captureError(`Function call error: ${error}`)
         addTranscriptBreadcrumb(`Error during function call: ${name}`, { error })
 
         // Record tool call failure
@@ -163,7 +164,7 @@ export function useHandleServerEvent({
             // Trigger AI to continue processing
             sendClientEvent({ type: "response.create" })
         } catch (error) {
-            window.elasticApm?.captureError(`Error in executeAgentTool ${error}`)
+            captureError(`Error in executeAgentTool ${error}`)
             handleFunctionError(error, callId, name)
         }
     }
@@ -240,14 +241,12 @@ export function useHandleServerEvent({
 
             return // Early return to prevent immediate response
         } else {
-            window.elasticApm?.captureError(
-                `Error in handleAgentTransfer destinationAgent${JSON.stringify(args, null, 2)}`,
-            )
+            captureError(`Error in handleAgentTransfer destinationAgent${JSON.stringify(args, null, 2)}`)
             console.error(`[TRANSFER] FAILED - destination agent not found: ${destinationAgent}`)
 
             console.log(`[TRANSFER] Available agents: ${selectedAgentConfigSet?.map((a) => a.name).join(", ")}`)
             window.alert(
-                `There's an issue with OpenAI Realtime API right now,😩 Please use the select menu in the top right corner to change between agents. OR a page refresh might fix things 😎`,
+                `There's an issue with OpenAI Realtime API right now,😩 Please use the select menu in the top corner to change between agents. OR a page refresh might fix things 😎`,
             )
             // Prepare failure response
             const transferResult = {
@@ -273,70 +272,182 @@ export function useHandleServerEvent({
      * Process function calls from the AI
      */
     const handleFunctionCall = async (params: FunctionCallParams) => {
+        // Start a transaction for the function call
+        const transaction = window.elasticApm?.startTransaction(`gen_ai.tool.${params.name}`, "app.tool")
         const { name, call_id, arguments: argsString } = params
         let args: any
-        console.log("params", params)
-        // Step 1: Parse the function arguments
-        try {
-            args = JSON.parse(argsString)
-            addTranscriptBreadcrumb(`Function call: ${name}`, args)
-        } catch (parseError) {
-            // Handle JSON parsing errors
-            console.error("JSON Parse Error:", parseError, "Raw JSON:", argsString)
 
-            addTranscriptBreadcrumb(`Error parsing arguments for function: ${name}`, {
-                error: parseError,
+        if (transaction) {
+            transaction.addLabels({
+                "gen_ai.system": "openai",
+                "gen_ai.operation.name": "realtime",
+                "gen_ai.tool.name": name,
+                "gen_ai.tool.called": true,
+                "gen_ai.tool.call_id": call_id || "",
             })
-
-            sendClientEvent({
-                type: "conversation.item.create",
-                item: {
-                    type: "function_call_error",
-                    call_id,
-                    output: JSON.stringify({
-                        error: "Invalid JSON provided",
-                        details: (parseError as Error).message,
-                    }),
-                },
-            })
-
-            sendClientEvent({ type: "response.create" })
-            return
         }
 
-        // Step 2: Execute the appropriate function
+        console.log("params", params)
+
         try {
-            const currentAgent = selectedAgentConfigSet?.find((a) => a.name === selectedAgentName)
+            // Step 1: Parse the function arguments with span
+            const parseSpan = transaction?.startSpan("gen_ai.tool.parse_args", "app")
+            try {
+                args = JSON.parse(argsString)
+                addTranscriptBreadcrumb(`Function call: ${name}`, args)
 
-            if (currentAgent?.toolLogic?.[name]) {
-                // Execute agent-specific tool
-                const fn = currentAgent.toolLogic[name]
-                await executeAgentTool(fn, args, name, call_id)
-            } else if (name === "transferAgents") {
-                // Handle agent transfer requests
-                handleAgentTransfer(args, call_id)
-            } else {
-                // Fallback for unknown functions
-                console.warn(`Unknown function called: ${name}`)
+                if (parseSpan) {
+                    parseSpan.addLabels({
+                        "gen_ai.tool.args_length": argsString.length,
+                        "gen_ai.tool.args_count": Object.keys(args).length,
+                    })
+                }
+            } catch (parseError) {
+                // Handle JSON parsing errors
+                console.error("JSON Parse Error:", parseError, "Raw JSON:", argsString)
+                captureError(parseError instanceof Error ? parseError : String(parseError), {
+                    custom: {
+                        rawJson: argsString.substring(0, 1000), // Limit size for APM
+                        toolName: name,
+                        callId: call_id,
+                    },
+                })
 
-                const simulatedResult = { result: true }
-                addTranscriptBreadcrumb(`Function fallback: ${name}`, simulatedResult)
+                if (parseSpan) {
+                    parseSpan.addLabels({
+                        error: parseError instanceof Error ? parseError.message : String(parseError),
+                        "error.type": "json_parse_error",
+                    })
+                }
+
+                if (transaction) {
+                    transaction.addLabels({
+                        "gen_ai.tool.success": false,
+                        "error.type": "json_parse_error",
+                    })
+                }
+
+                addTranscriptBreadcrumb(`Error parsing arguments for function: ${name}`, {
+                    error: parseError,
+                })
 
                 sendClientEvent({
                     type: "conversation.item.create",
                     item: {
-                        type: "function_call_output",
+                        type: "function_call_error",
                         call_id,
-                        output: JSON.stringify(simulatedResult),
+                        output: JSON.stringify({
+                            error: "Invalid JSON provided",
+                            details: (parseError as Error).message,
+                        }),
                     },
                 })
 
                 sendClientEvent({ type: "response.create" })
+                parseSpan?.end()
+                transaction?.end()
+                return
+            } finally {
+                parseSpan?.end()
+            }
+
+            // Step 2: Execute the appropriate function
+            const execSpan = transaction?.startSpan("gen_ai.tool.execute", "app")
+            try {
+                const currentAgent = selectedAgentConfigSet?.find((a) => a.name === selectedAgentName)
+
+                if (currentAgent?.toolLogic?.[name]) {
+                    // Add current agent context to span
+                    if (execSpan) {
+                        execSpan.addLabels({
+                            "agent.name": selectedAgentName || "",
+                            "gen_ai.tool.type": "agent_specific",
+                        })
+                    }
+
+                    // Execute agent-specific tool
+                    const fn = currentAgent.toolLogic[name]
+                    await executeAgentTool(fn, args, name, call_id)
+                } else if (name === "transferAgents") {
+                    // Add transfer context to span
+                    if (execSpan) {
+                        execSpan.addLabels({
+                            "gen_ai.tool.type": "transfer",
+                            "transfer.destination": args.destination_agent || "",
+                        })
+                    }
+
+                    // Handle agent transfer requests
+                    handleAgentTransfer(args, call_id)
+                } else {
+                    // Add fallback context to span
+                    if (execSpan) {
+                        execSpan.addLabels({
+                            "gen_ai.tool.type": "fallback",
+                            "gen_ai.tool.unknown": true,
+                        })
+                    }
+
+                    // Fallback for unknown functions
+                    console.warn(`Unknown function called: ${name}`)
+
+                    const simulatedResult = { result: true }
+                    addTranscriptBreadcrumb(`Function fallback: ${name}`, simulatedResult)
+
+                    sendClientEvent({
+                        type: "conversation.item.create",
+                        item: {
+                            type: "function_call_output",
+                            call_id,
+                            output: JSON.stringify(simulatedResult),
+                        },
+                    })
+
+                    sendClientEvent({ type: "response.create" })
+                }
+
+                // Mark as successful in transaction
+                if (transaction) {
+                    transaction.addLabels({
+                        "gen_ai.tool.success": true,
+                    })
+                }
+            } catch (error) {
+                // Handle any other execution errors
+                if (execSpan) {
+                    execSpan.addLabels({
+                        error: error instanceof Error ? error.message : String(error),
+                        "error.type": "execution_error",
+                    })
+                }
+
+                if (transaction) {
+                    transaction.addLabels({
+                        "gen_ai.tool.success": false,
+                        "error.type": "execution_error",
+                    })
+                }
+
+                handleFunctionError(error, call_id, name)
+                captureError(`Error in handleFunctionCall: ${error}`)
+            } finally {
+                execSpan?.end()
             }
         } catch (error) {
-            // Handle any other execution errors
-            handleFunctionError(error, call_id, name)
-            window.elasticApm?.captureError(`  Error in handleFunctionCall ${error}`)
+            // Handle any unexpected errors
+            if (transaction) {
+                transaction.addLabels({
+                    "gen_ai.tool.success": false,
+                    error: error instanceof Error ? error.message : String(error),
+                    "error.type": "unexpected_error",
+                })
+            }
+
+            captureError(`Unexpected error in handleFunctionCall: ${error}`)
+            console.error("Unexpected error handling function call:", error)
+        } finally {
+            // Always end the transaction
+            transaction?.end()
         }
     }
 
@@ -345,44 +456,107 @@ export function useHandleServerEvent({
      */
     const handleSessionEvent = (event: ServerEvent) => {
         if (event.session?.id) {
-            setSessionStatus("CONNECTED")
-            addTranscriptBreadcrumb(`Session ID: ${event.session.id}\nStarted at: ${new Date().toLocaleString()}`)
-            let emDashUID = localStorage.getItem("emDashUID")
-            if (!emDashUID) {
-                emDashUID = crypto.randomUUID()
-                localStorage.setItem("emDashUID", emDashUID)
-            }
+            // Start a transaction for session initialization
+            const transaction = window.elasticApm?.startTransaction("gen_ai.session.initialize", "app")
 
-            const transaction = window.elasticApm?.getCurrentTransaction()
-            if (transaction) {
-                transaction.addLabels({
-                    chat_Session_ID: event.session?.id,
-                    emDashUID: emDashUID,
+            try {
+                setSessionStatus("CONNECTED")
+                addTranscriptBreadcrumb(`Session ID: ${event.session.id}\nStarted at: ${new Date().toLocaleString()}`)
+
+                // Get or create user ID for tracking
+                let emDashUID = localStorage.getItem("emDashUID")
+                if (!emDashUID) {
+                    emDashUID = crypto.randomUUID()
+                    localStorage.setItem("emDashUID", emDashUID)
+                }
+
+                // Set user context in Elastic APM - this enables user-centric views in APM
+                window.elasticApm?.setUserContext({
+                    id: emDashUID,
+                    username: `user_${emDashUID.slice(0, 8)}`,
                 })
-            }
 
-            const checkFsAndSetApm = () => {
-                if (window.FS && transaction) {
-                    const fsUrl = window.FS("getSession", { format: "url" })
+                // Add custom context with session details
+                window.elasticApm?.setCustomContext({
+                    session: {
+                        id: event.session.id,
+                        agent: selectedAgentName || "unknown",
+                        started_at: new Date().toISOString(),
+                    },
+                })
 
-                    if (fsUrl) {
-                        transaction.addLabels({ fullstory_session_url: fsUrl })
-                        window.FS("setIdentity", {
-                            uid: emDashUID,
-                            properties: {
-                                chat_Session_ID: event.session?.id,
-                            },
-                        })
+                // Add labels for filtering in APM UI
+                if (transaction) {
+                    transaction.addLabels({
+                        "gen_ai.system": "openai",
+                        "gen_ai.operation.name": "realtime",
+                        "gen_ai.session.id": event.session.id,
+                        "user.id": emDashUID,
+                        "agent.name": selectedAgentName || "unknown",
+                    })
+                }
+
+                // Integration with FullStory for session correlation
+                const checkFsAndSetApm = () => {
+                    if (window.FS) {
+                        const fsUrl = window.FS("getSession", { format: "url" })
+
+                        if (fsUrl) {
+                            // Store FullStory URL for cross-referencing in Elastic APM
+                            window.elasticApm?.addLabels({
+                                "fullstory.url": fsUrl,
+                            })
+
+                            // Set identity in FullStory for cross-referencing
+                            window.FS("setIdentity", {
+                                uid: emDashUID,
+                                properties: {
+                                    chat_Session_ID: event.session!.id,
+                                },
+                            })
+                        } else {
+                            console.warn("FullStory session URL not yet available.")
+                            setTimeout(checkFsAndSetApm, 500)
+                        }
                     } else {
-                        console.warn("FullStory session URL not yet available.")
                         setTimeout(checkFsAndSetApm, 500)
                     }
-                } else {
-                    setTimeout(checkFsAndSetApm, 500)
                 }
-            }
 
-            checkFsAndSetApm()
+                checkFsAndSetApm()
+
+                // Create page load span for initial page performance
+                const pageLoadSpan = transaction?.startSpan("gen_ai.session.page_load", "app")
+                if (pageLoadSpan && window.performance) {
+                    const navigationTiming = window.performance.getEntriesByType(
+                        "navigation",
+                    )[0] as PerformanceNavigationTiming
+
+                    if (navigationTiming) {
+                        pageLoadSpan.addLabels({
+                            "page.dom_interactive": navigationTiming.domInteractive,
+                            "page.dom_complete": navigationTiming.domComplete,
+                            "page.load_event": navigationTiming.loadEventEnd,
+                            "page.response_start": navigationTiming.responseStart,
+                            "page.response_end": navigationTiming.responseEnd,
+                        })
+                    }
+
+                    pageLoadSpan.end()
+                }
+            } catch (error) {
+                console.error("Error in session initialization:", error)
+                captureError(error instanceof Error ? error : String(error))
+
+                if (transaction) {
+                    transaction.addLabels({
+                        error: error instanceof Error ? error.message : String(error),
+                    })
+                }
+            } finally {
+                // End the transaction
+                transaction?.end()
+            }
         }
     }
 
@@ -520,77 +694,171 @@ export function useHandleServerEvent({
      * Main server event handler - routes events to appropriate handlers
      */
     const handleServerEvent = (event: ServerEvent) => {
-        // Log all server events
-        logServerEvent(event)
+        // Start a transaction for server event handling
+        const transaction = window.elasticApm?.startTransaction(`gen_ai.event.${event.type}`, "app.event")
 
-        // For important events, send telemetry to the server
-        if (
-            event.type === "response.done" ||
-            event.type === "session.created" ||
-            event.type === "conversation.item.input_audio_transcription.completed" ||
-            event.type.includes("error")
-        ) {
-            // Send selective event data to avoid sending too much data
-            const telemetryData = {
-                eventId: event.event_id,
-                responseId: event.response_id,
-                hasOutput: !!event.response?.output,
-                hasUsage: !!event.response?.usage,
-                sessionId: event.session?.id,
-                itemId: event.item_id || event.item?.id,
-                statusDetails: event.response?.status_details,
-                // For transcription events, add transcript length info
-                transcriptLength: event.transcript ? event.transcript.length : undefined,
-                hasTranscript: !!event.transcript,
+        try {
+            // Log all server events
+            logServerEvent(event)
+
+            if (transaction) {
+                // Add common labels to the transaction
+                transaction.addLabels({
+                    "gen_ai.event.type": event.type,
+                    "gen_ai.system": "openai",
+                    "gen_ai.operation.name": "realtime",
+                })
+
+                // Add additional context based on event type
+                if (event.event_id) transaction.addLabels({ "gen_ai.event.id": event.event_id })
+                if (event.response_id) transaction.addLabels({ "gen_ai.response.id": event.response_id })
+                if (event.session?.id) transaction.addLabels({ "gen_ai.session.id": event.session.id })
+                if (event.item_id) transaction.addLabels({ "gen_ai.item.id": event.item_id })
+                else if (event.item?.id) transaction.addLabels({ "gen_ai.item.id": event.item.id })
             }
 
-            recordServerEvent(event.type, telemetryData)
-        }
+            // For important events, send telemetry to the server
+            if (
+                event.type === "response.done" ||
+                event.type === "session.created" ||
+                event.type === "conversation.item.input_audio_transcription.completed" ||
+                event.type.includes("error")
+            ) {
+                // Send selective event data to avoid sending too much data
+                const telemetryData = {
+                    eventId: event.event_id,
+                    responseId: event.response_id,
+                    hasOutput: !!event.response?.output,
+                    hasUsage: !!event.response?.usage,
+                    sessionId: event.session?.id,
+                    itemId: event.item_id || event.item?.id,
+                    statusDetails: event.response?.status_details,
+                    // For transcription events, add transcript length info
+                    transcriptLength: event.transcript ? event.transcript.length : undefined,
+                    hasTranscript: !!event.transcript,
+                }
 
-        // Extract common fields used across multiple events
-        const text = event.item?.content?.[0]?.text || event.item?.content?.[0]?.transcript || ""
-        const role = event.item?.role as "user" | "assistant"
-        const itemId = event.item?.id
+                // Create a span for telemetry recording
+                const telemetrySpan = transaction?.startSpan("gen_ai.record_telemetry", "app")
+                recordServerEvent(event.type, telemetryData)
+                telemetrySpan?.end()
+            }
 
-        // Route event to the appropriate handler
-        switch (event.type) {
-            case "session.created":
-                handleSessionEvent(event)
-                break
+            // Extract common fields used across multiple events
+            const text = event.item?.content?.[0]?.text || event.item?.content?.[0]?.transcript || ""
+            const role = event.item?.role as "user" | "assistant"
+            const itemId = event.item?.id
 
-            case "conversation.item.created":
-                handleMessageCreation(itemId, role, text)
-                break
+            // Route event to the appropriate handler with performance monitoring spans
+            switch (event.type) {
+                case "session.created": {
+                    const span = transaction?.startSpan("gen_ai.handle_session", "app")
+                    handleSessionEvent(event)
+                    span?.end()
+                    break
+                }
 
-            case "conversation.item.truncated":
-                // Log truncation events
-                addTranscriptBreadcrumb(`[Truncated at ${event.audio_end_ms}ms]`)
-                break
+                case "conversation.item.created": {
+                    const span = transaction?.startSpan("gen_ai.handle_message_creation", "app")
+                    if (span && itemId && role) {
+                        span.addLabels({
+                            "gen_ai.item.id": itemId,
+                            "gen_ai.item.role": role,
+                            "gen_ai.transcript.length": text.length,
+                        })
+                    }
+                    handleMessageCreation(itemId, role, text)
+                    span?.end()
+                    break
+                }
 
-            case "conversation.item.input_audio_transcription.completed":
-                handleTranscriptionCompleted(event)
-                break
+                case "conversation.item.truncated": {
+                    const span = transaction?.startSpan("gen_ai.handle_truncation", "app")
+                    // Log truncation events
+                    addTranscriptBreadcrumb(`[Truncated at ${event.audio_end_ms}ms]`)
+                    span?.end()
+                    break
+                }
 
-            case "response.audio_transcript.delta":
-                handleTextDelta(event)
-                break
+                case "conversation.item.input_audio_transcription.completed": {
+                    const span = transaction?.startSpan("gen_ai.handle_transcription", "app")
+                    if (span && event.transcript) {
+                        span.addLabels({
+                            "gen_ai.transcript.length": event.transcript.length,
+                            "gen_ai.item.id": event.item_id || "",
+                        })
+                    }
+                    handleTranscriptionCompleted(event)
+                    span?.end()
+                    break
+                }
 
-            case "response.done":
-                handleResponseDone(event)
-                break
+                case "response.audio_transcript.delta": {
+                    const span = transaction?.startSpan("gen_ai.handle_text_delta", "app")
+                    if (span && event.delta) {
+                        span.addLabels({
+                            "gen_ai.delta.length": event.delta.length,
+                            "gen_ai.item.id": event.item_id || "",
+                        })
+                    }
+                    handleTextDelta(event)
+                    span?.end()
+                    break
+                }
 
-            case "output_audio_buffer.started":
-                handleAudioBufferStarted(event)
-                break
+                case "response.done": {
+                    const span = transaction?.startSpan("gen_ai.handle_response_done", "app")
+                    if (span && event.response) {
+                        span.addLabels({
+                            "gen_ai.response.id": (event.response as any).id || "",
+                            "gen_ai.response.status": event.response.status || "",
+                            "gen_ai.has_usage": !!event.response.usage,
+                            "gen_ai.output_count": event.response.output?.length || 0,
+                        })
+                    }
+                    handleResponseDone(event)
+                    span?.end()
+                    break
+                }
 
-            case "output_audio_buffer.stopped":
-            case "output_audio_buffer.cleared":
-                handleAudioBufferEnded(event)
-                break
+                case "output_audio_buffer.started": {
+                    const span = transaction?.startSpan("gen_ai.handle_audio_buffer_started", "app")
+                    handleAudioBufferStarted(event)
+                    span?.end()
+                    break
+                }
 
-            case "response.output_item.done":
-                handleOutputItemDone(event)
-                break
+                case "output_audio_buffer.stopped":
+                case "output_audio_buffer.cleared": {
+                    const span = transaction?.startSpan("gen_ai.handle_audio_buffer_ended", "app")
+                    handleAudioBufferEnded(event)
+                    span?.end()
+                    break
+                }
+
+                case "response.output_item.done": {
+                    const span = transaction?.startSpan("gen_ai.handle_output_item_done", "app")
+                    if (span && event.item?.id) {
+                        span.addLabels({
+                            "gen_ai.item.id": event.item.id,
+                        })
+                    }
+                    handleOutputItemDone(event)
+                    span?.end()
+                    break
+                }
+            }
+        } catch (error) {
+            console.error("Error handling server event:", error)
+            captureError(error instanceof Error ? error : String(error))
+            if (transaction) {
+                transaction.addLabels({
+                    error: error instanceof Error ? error.message : String(error),
+                })
+            }
+        } finally {
+            // End the transaction
+            transaction?.end()
         }
     }
 

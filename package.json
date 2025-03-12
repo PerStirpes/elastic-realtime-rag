@@ -1,6 +1,6 @@
 {
     "name": "realtime-elastic",
-    "version": "0.13.1",
+    "version": "0.13.2",
     "private": true,
     "scripts": {
         "dev": "next dev",
@@ -10,7 +10,7 @@
         "lint": "next lint"
     },
     "dependencies": {
-        "@elastic/elasticsearch": "^8.17.0",
+        "@elastic/elasticsearch": "^8.17.1",
         "@elastic/opentelemetry-instrumentation-openai": "^0.4.1",
         "@elastic/opentelemetry-node": "^0.6.0",
         "@opentelemetry/api": "^1.9.0",
@@ -26,10 +26,10 @@
         "@opentelemetry/sdk-node": "^0.57.2",
         "@opentelemetry/sdk-trace-node": "^1.21.0",
         "@opentelemetry/semantic-conventions": "^1.21.0",
-        "babel-plugin-react-compiler": "^19.0.0-beta-714736e-20250131",
+        "babel-plugin-react-compiler": "^19.0.0-beta-bafa41b-20250307",
         "formdata-node": "^6.0.3",
         "husky": "^9.1.7",
-        "next": "15.1.6",
+        "next": "15.2.2",
         "openai": "^4.86.1",
         "perf_hooks": "^0.0.1",
         "prettier": "^3.4.2",
