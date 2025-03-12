@@ -197,10 +197,8 @@ export function useRealtimeConnection({
         } catch (err) {
             console.error("Error connecting to realtime:", err)
 
-            const fsUrl = window.FS("getSession", { format: "url.now" })
-
-            window.elasticApm?.captureError(`Error connecting to realtime: ${err} - fullstory_url: ${fsUrl}`)
-            window.alert("This app needs access to your microphone, Please enable you microphone")
+            window.elasticApm?.captureError(`Error connecting to realtime: ${err}`)
+            window.alert("This app needs access to your microphone, Please enable your microphone")
 
             setSessionStatus("DISCONNECTED")
         }

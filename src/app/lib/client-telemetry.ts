@@ -1,62 +1,70 @@
 /**
  * Client-side telemetry utility
  *
- * This module provides functions to send telemetry data to the server-side
- * OpenTelemetry instrumentation. It acts as a bridge between client-side events
- * and the server-side tracing infrastructure.
+ * This module provides functions to directly instrument frontend operations with Elastic APM RUM,
+ * creating transactions and spans following the OpenTelemetry semantic conventions.
  */
 
 import { TokenUsage } from "../types"
-
+import * as semconv from "./semconv"
+import { startTransaction, captureError } from "./apm-rum"
 /**
  * Records token usage metrics from OpenAI response.done events
  */
 export async function recordTokenUsage(usageData: TokenUsage, model?: string) {
     try {
-        // Create event data with all token details
-        const eventData: any = {
-            totalTokens: usageData.total_tokens,
-            inputTokens: usageData.input_tokens,
-            outputTokens: usageData.output_tokens,
-            model: model || "unknown",
-        }
+        // Start a transaction for token usage
+        const transaction = startTransaction("gen_ai.token_usage", "metrics")
+        if (!transaction) return
+
+        // Set attributes
+        transaction.addLabels({
+            [semconv.ATTR_GEN_AI_SYSTEM]: "openai",
+            [semconv.ATTR_GEN_AI_OPERATION_NAME]: "realtime",
+            [semconv.ATTR_GEN_AI_TOTAL_TOKENS]: usageData.total_tokens,
+            [semconv.ATTR_GEN_AI_USAGE_INPUT_TOKENS]: usageData.input_tokens,
+            [semconv.ATTR_GEN_AI_USAGE_OUTPUT_TOKENS]: usageData.output_tokens,
+            [semconv.ATTR_GEN_AI_RESPONSE_MODEL]: model || "unknown",
+        })
 
         // Add input token details if available
         if (usageData.input_token_details) {
-            eventData.inputTextTokens = usageData.input_token_details.text_tokens
-            eventData.inputAudioTokens = usageData.input_token_details.audio_tokens
+            transaction.addLabels({
+                [semconv.ATTR_GEN_AI_INPUT_TEXT_TOKENS]: usageData.input_token_details.text_tokens,
+                [semconv.ATTR_GEN_AI_INPUT_AUDIO_TOKENS]: usageData.input_token_details.audio_tokens,
+            })
 
             // Add cached tokens information
             if (usageData.input_token_details.cached_tokens) {
-                eventData.cachedTokens = usageData.input_token_details.cached_tokens
+                transaction.addLabels({
+                    [semconv.ATTR_GEN_AI_CACHED_TOKENS]: usageData.input_token_details.cached_tokens,
+                })
 
                 // Add cached tokens details if available
                 if (usageData.input_token_details.cached_tokens_details) {
-                    eventData.cachedTextTokens = usageData.input_token_details.cached_tokens_details.text_tokens
-                    eventData.cachedAudioTokens = usageData.input_token_details.cached_tokens_details.audio_tokens
+                    transaction.addLabels({
+                        [semconv.ATTR_GEN_AI_CACHED_TEXT_TOKENS]:
+                            usageData.input_token_details.cached_tokens_details.text_tokens,
+                        [semconv.ATTR_GEN_AI_CACHED_AUDIO_TOKENS]:
+                            usageData.input_token_details.cached_tokens_details.audio_tokens,
+                    })
                 }
             }
         }
 
         // Add output token details if available
         if (usageData.output_token_details) {
-            eventData.outputTextTokens = usageData.output_token_details.text_tokens
-            eventData.outputAudioTokens = usageData.output_token_details.audio_tokens
+            transaction.addLabels({
+                [semconv.ATTR_GEN_AI_OUTPUT_TEXT_TOKENS]: usageData.output_token_details.text_tokens,
+                [semconv.ATTR_GEN_AI_OUTPUT_AUDIO_TOKENS]: usageData.output_token_details.audio_tokens,
+            })
         }
 
-        // Include the full input_token_details and output_token_details objects
-        // This ensures all fields are available even if we don't explicitly extract them
-        eventData.input_token_details = usageData.input_token_details
-        eventData.output_token_details = usageData.output_token_details
-
-        const payload = {
-            eventType: "token_usage",
-            eventData,
-        }
-
-        await sendTelemetry(payload)
+        // End the transaction
+        transaction.end()
     } catch (error) {
         console.error("Error recording token usage:", error)
+        captureError(error instanceof Error ? error : String(error), { tags: { source: "client-telemetry" } })
     }
 }
 
@@ -65,6 +73,10 @@ export async function recordTokenUsage(usageData: TokenUsage, model?: string) {
  */
 export async function recordResponseDoneDetails(responseData: any) {
     try {
+        // Start a transaction for response details
+        const transaction = startTransaction("gen_ai.response_details", "app")
+        if (!transaction) return
+
         const output = responseData.output?.[0] || {}
         const content = output.content || []
 
@@ -72,73 +84,83 @@ export async function recordResponseDoneDetails(responseData: any) {
         const audioContent = content.find((c: any) => c.type === "audio" && c.transcript)
         const transcript = audioContent?.transcript || ""
 
-        // Get first few characters of transcript for logging (to avoid storing very large responses)
+        // Get first few characters of transcript for logging
         const transcriptPreview =
             transcript.length > 0 ? transcript.substring(0, 150) + (transcript.length > 150 ? "..." : "") : ""
 
-        const payload = {
-            eventType: "response_details",
-            eventData: {
-                // Top-level response metadata
-                responseId: responseData.id,
-                responseStatus: responseData.status,
-                statusDetails: responseData.status_details,
-                conversationId: responseData.conversation_id,
+        // Set attributes using semantic conventions
+        transaction.addLabels({
+            [semconv.ATTR_GEN_AI_SYSTEM]: "openai",
+            [semconv.ATTR_GEN_AI_OPERATION_NAME]: "realtime",
+            [semconv.ATTR_GEN_AI_RESPONSE_ID]: responseData.id,
+            [semconv.ATTR_GEN_AI_RESPONSE_STATUS]: responseData.status,
+            [semconv.ATTR_GEN_AI_CONVERSATION_ID]: responseData.conversation_id,
+            [semconv.ATTR_GEN_AI_VOICE]: responseData.voice,
+            [semconv.ATTR_GEN_AI_OUTPUT_AUDIO_FORMAT]: responseData.output_audio_format,
+            [semconv.ATTR_GEN_AI_TEMPERATURE]: responseData.temperature,
+            [semconv.ATTR_GEN_AI_MAX_OUTPUT_TOKENS]: responseData.max_output_tokens,
+            [semconv.ATTR_GEN_AI_OUTPUT_ITEM_ID]: output.id,
+            [semconv.ATTR_GEN_AI_OUTPUT_ITEM_TYPE]: output.type,
+            [semconv.ATTR_GEN_AI_OUTPUT_ITEM_STATUS]: output.status,
+            [semconv.ATTR_GEN_AI_OUTPUT_ITEM_ROLE]: output.role,
+            [semconv.ATTR_GEN_AI_HAS_AUDIO_CONTENT]: content.some((c: any) => c.type === "audio"),
+            [semconv.ATTR_GEN_AI_HAS_TRANSCRIPT]: !!transcriptPreview,
+            [semconv.ATTR_GEN_AI_TRANSCRIPT_LENGTH]: transcript.length,
+        })
 
-                // Modalities and voice details
-                modalities: responseData.modalities,
-                voice: responseData.voice,
-                outputAudioFormat: responseData.output_audio_format,
-
-                // Configuration parameters
-                temperature: responseData.temperature,
-                maxOutputTokens: responseData.max_output_tokens,
-
-                // Output details
-                outputItemId: output.id,
-                outputItemType: output.type,
-                outputItemStatus: output.status,
-                outputItemRole: output.role,
-
-                // Content details
-                hasAudioContent: content.some((c: any) => c.type === "audio"),
-                contentTypes: content.map((c: any) => c.type),
-
-                // Transcript information (truncated preview)
-                hasTranscript: !!transcriptPreview,
-                transcriptPreview: transcriptPreview,
-                transcriptLength: transcript.length,
-
-                // Usage details are handled separately via recordTokenUsage
-                hasUsage: !!responseData.usage,
-            },
+        // For array values like modalities and content types, convert to comma-separated strings
+        if (responseData.modalities) {
+            transaction.addLabels({
+                [semconv.ATTR_GEN_AI_MODALITIES]: responseData.modalities.join(","),
+            })
         }
 
-        await sendTelemetry(payload)
+        if (content.length > 0) {
+            transaction.addLabels({
+                [semconv.ATTR_GEN_AI_CONTENT_TYPES]: content.map((c: any) => c.type).join(","),
+            })
+        }
+
+        // End the transaction
+        transaction.end()
     } catch (error) {
         console.error("Error recording response details:", error)
+        window.elasticApm?.captureError(error instanceof Error ? error : String(error))
     }
 }
 
 /**
  * Records tool call telemetry
  */
-export async function recordToolCall(toolName: string, success: boolean, resultCount?: number, error?: string) {
+export async function recordToolCall(toolName: string, success: boolean, resultCount?: number, error?: any) {
     try {
-        const payload = {
-            eventType: "tool_call",
-            eventData: {
-                toolName,
-                success,
-                resultCount,
-                error,
-                timestamp: Date.now(),
-            },
+        // Start a transaction for tool call
+        const transaction = window.elasticApm?.startTransaction("gen_ai.tool_call", "app")
+        if (!transaction) return
+
+        // Add semantic convention labels
+        transaction.addLabels({
+            [semconv.ATTR_GEN_AI_SYSTEM]: "openai",
+            [semconv.ATTR_GEN_AI_OPERATION_NAME]: "realtime",
+            [semconv.ATTR_GEN_AI_TOOL_CALLED]: true,
+            [semconv.ATTR_GEN_AI_TOOL_NAME]: toolName,
+            [semconv.ATTR_GEN_AI_TOOL_SUCCESS]: success,
+            ...(resultCount !== undefined ? { [semconv.ATTR_GEN_AI_TOOL_RESULT_COUNT]: resultCount } : {}),
+        })
+
+        // If there's an error, capture it
+        if (error) {
+            transaction.addLabels({
+                [semconv.ATTR_GEN_AI_TOOL_ERROR]: error,
+            })
+            window.elasticApm?.captureError(error instanceof Error ? error : String(error))
         }
 
-        await sendTelemetry(payload)
+        // End the transaction
+        transaction.end()
     } catch (error) {
         console.error("Error recording tool call:", error)
+        window.elasticApm?.captureError(error instanceof Error ? error : String(error))
     }
 }
 
@@ -149,25 +171,34 @@ export async function recordRealtimeFetch(
     url: string,
     method: string,
     statusCode?: number,
-    error?: string,
+    error?: any,
     model?: string,
 ) {
     try {
-        const payload = {
-            eventType: "realtime_fetch",
-            eventData: {
-                url,
-                method,
-                statusCode,
-                error,
-                model,
-                timestamp: Date.now(),
-            },
+        // Start a transaction for realtime fetch
+        const transaction = window.elasticApm?.startTransaction("gen_ai.realtime_fetch", "external")
+        if (!transaction) return
+
+        // Add labels with semantic conventions
+        transaction.addLabels({
+            [semconv.ATTR_GEN_AI_SYSTEM]: "openai",
+            [semconv.ATTR_GEN_AI_OPERATION_NAME]: "realtime",
+            "http.url": url,
+            "http.method": method,
+            ...(statusCode ? { "http.status_code": statusCode } : {}),
+            ...(model ? { [semconv.ATTR_GEN_AI_RESPONSE_MODEL]: model } : {}),
+        })
+
+        // If there's an error, capture it
+        if (error) {
+            window.elasticApm?.captureError(error instanceof Error ? error : String(error))
         }
 
-        await sendTelemetry(payload)
+        // End the transaction
+        transaction.end()
     } catch (error) {
         console.error("Error recording realtime fetch:", error)
+        window.elasticApm?.captureError(error instanceof Error ? error : String(error))
     }
 }
 
@@ -176,24 +207,30 @@ export async function recordRealtimeFetch(
  */
 export async function recordServerEvent(eventType: string, eventData: any) {
     try {
-        const payload = {
-            eventType: "server_event",
-            eventData: {
-                serverEventType: eventType,
-                ...eventData,
-                timestamp: Date.now(),
-            },
-        }
+        // Start a transaction for server event
+        const transaction = window.elasticApm?.startTransaction("gen_ai.server_event", "app")
+        if (!transaction) return
 
-        await sendTelemetry(payload)
+        // Add event data as labels following semantic conventions
+        transaction.addLabels({
+            [semconv.ATTR_GEN_AI_SYSTEM]: "openai",
+            [semconv.ATTR_GEN_AI_OPERATION_NAME]: "realtime",
+            [semconv.ATTR_GEN_AI_EVENT_TYPE]: eventType,
+            ...(eventData.agent ? { agent: eventData.agent } : {}),
+            ...(eventData.itemType ? { "item.type": eventData.itemType } : {}),
+            ...(eventData.itemRole ? { "item.role": eventData.itemRole } : {}),
+        })
+
+        // End the transaction
+        transaction.end()
     } catch (error) {
         console.error("Error recording server event:", error)
+        window.elasticApm?.captureError(error instanceof Error ? error : String(error))
     }
 }
 
 /**
  * Records the full transcript from a completed response for archival purposes
- * This should be used selectively, as it can generate large amounts of data
  */
 export async function recordFullTranscript(responseData: any) {
     try {
@@ -209,24 +246,29 @@ export async function recordFullTranscript(responseData: any) {
             return
         }
 
-        const payload = {
-            eventType: "full_transcript",
-            eventData: {
-                responseId: responseData.id,
-                outputItemId: output.id,
-                timestamp: Date.now(),
-                transcript: transcript,
-                // Include minimal context with full transcript
-                role: "assistant", // Explicitly mark as from assistant
-                transcriptSource: "assistant",
-                status: responseData.status,
-                conversationId: responseData.conversation_id,
-            },
-        }
+        // Start a transaction for full transcript
+        const transaction = window.elasticApm?.startTransaction("gen_ai.full_transcript", "app")
+        if (!transaction) return
 
-        await sendTelemetry(payload)
+        // Add labels following semantic conventions
+        transaction.addLabels({
+            [semconv.ATTR_GEN_AI_SYSTEM]: "openai",
+            [semconv.ATTR_GEN_AI_OPERATION_NAME]: "realtime",
+            [semconv.ATTR_GEN_AI_RESPONSE_ID]: responseData.id,
+            [semconv.ATTR_GEN_AI_OUTPUT_ITEM_ID]: output.id,
+            [semconv.ATTR_GEN_AI_TRANSCRIPT_TIMESTAMP]: Date.now(),
+            [semconv.ATTR_GEN_AI_TRANSCRIPT_LENGTH]: transcript.length,
+            [semconv.ATTR_GEN_AI_TRANSCRIPT_ROLE]: "assistant",
+            [semconv.ATTR_GEN_AI_TRANSCRIPT_SOURCE]: "assistant",
+            [semconv.ATTR_GEN_AI_RESPONSE_STATUS]: responseData.status,
+            [semconv.ATTR_GEN_AI_CONVERSATION_ID]: responseData.conversation_id,
+        })
+
+        // End the transaction
+        transaction.end()
     } catch (error) {
         console.error("Error recording full transcript:", error)
+        window.elasticApm?.captureError(error instanceof Error ? error : String(error))
     }
 }
 
@@ -242,23 +284,28 @@ export async function recordUserTranscript(event: any) {
             return
         }
 
-        const payload = {
-            eventType: "user_transcript",
-            eventData: {
-                eventId: event.event_id,
-                itemId: event.item_id,
-                timestamp: Date.now(),
-                transcript: transcript,
-                contentIndex: event.content_index,
-                // Explicitly mark as from user
-                role: "user",
-                transcriptSource: "user",
-            },
-        }
+        // Start a transaction for user transcript
+        const transaction = window.elasticApm?.startTransaction("gen_ai.user_transcript", "app")
+        if (!transaction) return
 
-        await sendTelemetry(payload)
+        // Add labels following semantic conventions
+        transaction.addLabels({
+            [semconv.ATTR_GEN_AI_SYSTEM]: "openai",
+            [semconv.ATTR_GEN_AI_OPERATION_NAME]: "realtime",
+            [semconv.ATTR_GEN_AI_EVENT_ID]: event.event_id,
+            [semconv.ATTR_GEN_AI_ITEM_ID]: event.item_id,
+            [semconv.ATTR_GEN_AI_TRANSCRIPT_TIMESTAMP]: Date.now(),
+            [semconv.ATTR_GEN_AI_TRANSCRIPT_LENGTH]: transcript.length,
+            [semconv.ATTR_GEN_AI_CONTENT_INDEX]: event.content_index,
+            [semconv.ATTR_GEN_AI_TRANSCRIPT_ROLE]: "user",
+            [semconv.ATTR_GEN_AI_TRANSCRIPT_SOURCE]: "user",
+        })
+
+        // End the transaction
+        transaction.end()
     } catch (error) {
         console.error("Error recording user transcript:", error)
+        window.elasticApm?.captureError(error instanceof Error ? error : String(error))
     }
 }
 
@@ -267,46 +314,62 @@ export async function recordUserTranscript(event: any) {
  */
 export async function recordCompleteDoneEvent(eventData: any) {
     try {
-        // First, extract and record token usage separately
+        // Start a parent transaction for the complete event
+        const transaction = window.elasticApm?.startTransaction("gen_ai.response.done", "app")
+        if (!transaction) return
+
+        // Add common labels
+        transaction.addLabels({
+            [semconv.ATTR_GEN_AI_SYSTEM]: "openai",
+            [semconv.ATTR_GEN_AI_OPERATION_NAME]: "realtime",
+        })
+
+        // First, extract and record token usage as span
+        if (eventData.response?.usage) {
+            const tokenUsageSpan = transaction.startSpan("gen_ai.token_usage", "metrics")
+            if (tokenUsageSpan) {
+                const usage = eventData.response.usage
+                tokenUsageSpan.addLabels({
+                    [semconv.ATTR_GEN_AI_TOTAL_TOKENS]: usage.total_tokens,
+                    [semconv.ATTR_GEN_AI_USAGE_INPUT_TOKENS]: usage.input_tokens,
+                    [semconv.ATTR_GEN_AI_USAGE_OUTPUT_TOKENS]: usage.output_tokens,
+                    [semconv.ATTR_GEN_AI_RESPONSE_MODEL]: eventData.response.model || "unknown",
+                })
+                tokenUsageSpan.end()
+            }
+        }
+
+        // Second, record response details as a span
+        if (eventData.response) {
+            const responseDetailsSpan = transaction.startSpan("gen_ai.response_details", "app")
+            if (responseDetailsSpan) {
+                const output = eventData.response.output?.[0] || {}
+
+                responseDetailsSpan.addLabels({
+                    [semconv.ATTR_GEN_AI_RESPONSE_ID]: eventData.response.id,
+                    [semconv.ATTR_GEN_AI_CONVERSATION_ID]: eventData.response.conversation_id,
+                    [semconv.ATTR_GEN_AI_RESPONSE_MODEL]: eventData.response.model,
+                    [semconv.ATTR_GEN_AI_RESPONSE_STATUS]: eventData.response.status,
+                    [semconv.ATTR_GEN_AI_OUTPUT_ITEM_ID]: output.id,
+                })
+                responseDetailsSpan.end()
+            }
+        }
+
+        // End the parent transaction
+        transaction.end()
+
+        // Extract and record token usage separately for backward compatibility
         if (eventData.response?.usage) {
             await recordTokenUsage(eventData.response.usage, eventData.response.model)
         }
 
-        // Second, record response details
+        // Record response details separately for backward compatibility
         if (eventData.response) {
             await recordResponseDoneDetails(eventData.response)
         }
-
-        // Finally, send the complete event as-is
-        const payload = {
-            eventType: "response.done",
-            eventData,
-        }
-
-        await sendTelemetry(payload)
     } catch (error) {
         console.error("Error recording complete done event:", error)
-    }
-}
-
-/**
- * Sends telemetry data to the server endpoint
- */
-async function sendTelemetry(payload: any) {
-    try {
-        const response = await fetch("/api/telemetry", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-        })
-
-        // Log failure details if the response is not OK
-        if (!response.ok) {
-            console.warn("Telemetry request failed:", response.status, await response.text())
-        }
-    } catch (error) {
-        console.error("Error sending telemetry:", error)
+        window.elasticApm?.captureError(error instanceof Error ? error : String(error))
     }
 }
