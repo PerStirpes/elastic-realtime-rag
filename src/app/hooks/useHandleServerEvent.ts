@@ -172,9 +172,11 @@ export function useHandleServerEvent({
      * Handle agent transfer requests
      */
     const handleAgentTransfer = (args: any, callId?: string) => {
-        //todo find the bug and squash it
+        console.log("[TRANSFER] Args received:", args)
         const destinationAgent = args.destination_agent
-
+        console.log(`[TRANSFER] Request to transfer to agent: ${destinationAgent}`)
+        //todo find the bug and squash it
+        const conversationContext = args.conversation_context
         // Log transfer request
         console.log(`[TRANSFER] Request to transfer to agent: ${destinationAgent}`)
 
@@ -210,6 +212,7 @@ export function useHandleServerEvent({
                         {
                             type: "session.update.after.transfer",
                             agent: destinationAgent,
+                            conversation_context: conversationContext,
                         },
                         "Trigger session update after transfer",
                     )
@@ -219,6 +222,7 @@ export function useHandleServerEvent({
                 const transferResult = {
                     destination_agent: destinationAgent,
                     did_transfer: verifiedSuccess,
+                    conversation_context: conversationContext,
                     verified: true,
                 }
 
@@ -236,10 +240,14 @@ export function useHandleServerEvent({
 
             return // Early return to prevent immediate response
         } else {
-            window.elasticApm?.captureError(`Error in handleAgentTransfer ${destinationAgent}`)
-            console.error(`[TRANSFER] FAILED - agent not found: ${destinationAgent}`)
-            console.log(`[TRANSFER] Available agents: ${selectedAgentConfigSet?.map((a) => a.name).join(", ")}`)
 
+            window.elasticApm?.captureError(`Error in handleAgentTransfer destinationAgent${args.toString()}`)
+            console.error(`[TRANSFER] FAILED - destination agent not found: ${destinationAgent}`)
+
+            console.log(`[TRANSFER] Available agents: ${selectedAgentConfigSet?.map((a) => a.name).join(", ")}`)
+            window.alert(
+                `There's an issue with OpenAI Realtime API right now,😩 Please use the select menu in the top right corner to change between agents, refresh the page or try again later 😎`,
+            )
             // Prepare failure response
             const transferResult = {
                 destination_agent: destinationAgent,
@@ -266,7 +274,7 @@ export function useHandleServerEvent({
     const handleFunctionCall = async (params: FunctionCallParams) => {
         const { name, call_id, arguments: argsString } = params
         let args: any
-
+        console.log("params", params)
         // Step 1: Parse the function arguments
         try {
             args = JSON.parse(argsString)
