@@ -240,13 +240,14 @@ export function useHandleServerEvent({
 
             return // Early return to prevent immediate response
         } else {
-
-            window.elasticApm?.captureError(`Error in handleAgentTransfer destinationAgent${args.toString()}`)
+            window.elasticApm?.captureError(
+                `Error in handleAgentTransfer destinationAgent${JSON.stringify(args, null, 2)}`,
+            )
             console.error(`[TRANSFER] FAILED - destination agent not found: ${destinationAgent}`)
 
             console.log(`[TRANSFER] Available agents: ${selectedAgentConfigSet?.map((a) => a.name).join(", ")}`)
             window.alert(
-                `There's an issue with OpenAI Realtime API right now,😩 Please use the select menu in the top right corner to change between agents, refresh the page or try again later 😎`,
+                `There's an issue with OpenAI Realtime API right now,😩 Please use the select menu in the top right corner to change between agents. OR a page refresh might fix things 😎`,
             )
             // Prepare failure response
             const transferResult = {
