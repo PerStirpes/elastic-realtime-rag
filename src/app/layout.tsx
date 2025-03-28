@@ -34,7 +34,7 @@ export default function RootLayout({
               serverUrl: 'https://abbe56903b824f85b28892772f898006.apm.us-east-1.aws.cloud.es.io:443',
               environment: '${process.env.NODE_ENV || "development"}',
               breakdownMetrics: true,  
-              serviceVersion: "${process.env.APP_VERSION || "0.13.2"}",
+              serviceVersion: "${process.env.APP_VERSION || "0.13.3"}",
             });
           `}
                 </Script>

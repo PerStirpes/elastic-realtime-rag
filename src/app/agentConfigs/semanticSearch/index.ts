@@ -4,13 +4,14 @@ import elasticExpert from "./elasticBlogsAgent"
 import medicareAgent from "./medicareAgent"
 import irsAgent from "./irsAgent"
 import { injectTransferTools } from "../utility"
+import bioguideAgent from "./bioguideAgent"
 
-greeter.downstreamAgents = [vaAgent, elasticExpert, medicareAgent, irsAgent]
-vaAgent.downstreamAgents = [elasticExpert, medicareAgent, greeter, irsAgent]
-elasticExpert.downstreamAgents = [vaAgent, medicareAgent, greeter, irsAgent]
-medicareAgent.downstreamAgents = [vaAgent, elasticExpert, greeter, irsAgent]
-irsAgent.downstreamAgents = [vaAgent, elasticExpert, greeter, medicareAgent]
+greeter.downstreamAgents = [vaAgent, elasticExpert, medicareAgent, irsAgent, bioguideAgent]
+vaAgent.downstreamAgents = [elasticExpert, medicareAgent, greeter, irsAgent, bioguideAgent]
+elasticExpert.downstreamAgents = [vaAgent, medicareAgent, greeter, irsAgent, bioguideAgent]
+medicareAgent.downstreamAgents = [vaAgent, elasticExpert, greeter, irsAgent, bioguideAgent]
+irsAgent.downstreamAgents = [vaAgent, elasticExpert, greeter, medicareAgent, bioguideAgent]
 
-const agents = injectTransferTools([greeter, vaAgent, elasticExpert, medicareAgent, irsAgent])
+const agents = injectTransferTools([greeter, vaAgent, elasticExpert, medicareAgent, irsAgent, bioguideAgent])
 
 export default agents

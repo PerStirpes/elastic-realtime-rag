@@ -1,10 +1,19 @@
 {
     "name": "realtime-elastic",
-    "version": "0.13.2",
+    "version": "0.13.3",
+    "description": "Realtime Elastic search agent built with Next.js and OpenAI integration.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PerStirpes/elastic-realtime-rag.git"
+    },
+    "engines": {
+        "node": ">=14"
+    },
+    "license": "MIT",
     "private": true,
     "scripts": {
         "dev": "next dev",
-        "b:dev:": "NODE_OPTIONS='--require @elastic/opentelemetry-node' next build",
+        "build:dev": "NODE_OPTIONS='--require @elastic/opentelemetry-node' next build",
         "build": "next build",
         "start": "next start",
         "lint": "next lint"
@@ -29,7 +38,7 @@
         "babel-plugin-react-compiler": "^19.0.0-beta-bafa41b-20250307",
         "formdata-node": "^6.0.3",
         "husky": "^9.1.7",
-        "next": "15.2.2",
+        "next": "15.2.4",
         "openai": "^4.86.1",
         "perf_hooks": "^0.0.1",
         "prettier": "^3.4.2",
