@@ -28,9 +28,9 @@ const sdk = new NodeSDK({
     // Use BatchSpanProcessor instead of SimpleSpanProcessor to reduce concurrent exports
     spanProcessors: [
         new BatchSpanProcessor(new OTLPTraceExporter(), {
-            // Increase the scheduling delay and reduce max export batch size
-            scheduledDelayMillis: 3000,
-            maxExportBatchSize: 200,
+            // Increase scheduled delay and reduce batch size to minimize concurrent exports overhead
+            scheduledDelayMillis: 5000, // increased from 3000
+            maxExportBatchSize: 100, // decreased from 200
             exportTimeoutMillis: 10000,
         }),
     ],

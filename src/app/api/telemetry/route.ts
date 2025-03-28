@@ -302,9 +302,9 @@ function processResponseDetails(span: Span, eventData: Record<string, any>): voi
     setArrayAttribute(span, ATTR_GEN_AI_CONTENT_TYPES, eventData.contentTypes)
 
     // Transcript information
-    setAttributeIfExists(span, ATTR_GEN_AI_HAS_TRANSCRIPT, eventData.hasTranscript) // REMOVE
+    setAttributeIfExists(span, ATTR_GEN_AI_HAS_TRANSCRIPT, eventData.hasTranscript)
     setAttributeIfExists(span, ATTR_GEN_AI_TRANSCRIPT_LENGTH, eventData.transcriptLength)
-    setAttributeIfExists(span, ATTR_GEN_AI_TRANSCRIPT_PREVIEW, eventData.transcriptPreview) //REMOVE
+    setAttributeIfExists(span, ATTR_GEN_AI_TRANSCRIPT_PREVIEW, eventData.transcriptPreview)
 }
 
 /**
@@ -313,7 +313,7 @@ function processResponseDetails(span: Span, eventData: Record<string, any>): voi
 function processFullTranscript(span: Span, eventData: Record<string, any>): void {
     setAttributeIfExists(span, ATTR_GEN_AI_RESPONSE_ID, eventData.responseId)
     setAttributeIfExists(span, ATTR_GEN_AI_OUTPUT_ITEM_ID, eventData.outputItemId)
-    setAttributeIfExists(span, ATTR_GEN_AI_OUTPUT_ITEM_ROLE, eventData.role) //REMOVE
+    setAttributeIfExists(span, ATTR_GEN_AI_OUTPUT_ITEM_ROLE, eventData.role)
     setAttributeIfExists(span, ATTR_GEN_AI_RESPONSE_STATUS, eventData.status)
     setAttributeIfExists(span, ATTR_GEN_AI_CONVERSATION_ID, eventData.conversationId)
     setAttributeIfExists(span, ATTR_GEN_AI_TRANSCRIPT_FULL, eventData.transcript)
@@ -333,7 +333,7 @@ function processUserTranscript(span: Span, eventData: Record<string, any>): void
     setAttributeIfExists(span, ATTR_GEN_AI_TRANSCRIPT_FULL, eventData.transcript)
 
     // Always mark these as from user
-    span.setAttribute(ATTR_GEN_AI_TRANSCRIPT_SOURCE, "user") //REMOVE
+    span.setAttribute(ATTR_GEN_AI_TRANSCRIPT_SOURCE, "user")
     span.setAttribute(ATTR_GEN_AI_TRANSCRIPT_ROLE, "user")
 }
 
@@ -433,7 +433,7 @@ class BatchTelemetryProcessor {
             "batch.processing": true,
         }
 
-        // Create span based on event type
+        // Create span with optimized context reuse
         const span = tracer.startSpan(
             `gen_ai.realtime.${eventType}`,
             {
@@ -443,47 +443,32 @@ class BatchTelemetryProcessor {
             parentCtx,
         )
 
-        // Create context with span
+        // Create updated context with the span
         const ctx: Context = trace.setSpan(context.active(), span)
-
-        // Process event data using context
         context.with(ctx, () => {
-            console.log(`context.with Processing event: ${eventType}`, eventData)
-
-            // Process event data based on type
+            // Process event based on type
             switch (eventType) {
                 case "token_usage":
                     processTokenUsage(span, eventData)
                     break
-
                 case "tool_call":
                     processToolCall(span, eventData)
                     break
-
                 case "realtime_fetch":
                     processRealtimeFetch(span, eventData)
                     break
-
                 case "response_details":
                     processResponseDetails(span, eventData)
                     break
-
                 case "full_transcript":
                     processFullTranscript(span, eventData)
                     break
-
                 case "user_transcript":
                     processUserTranscript(span, eventData)
                     break
-
                 default:
                     debug(`Unknown event type: ${eventType}`)
             }
-
-            // Process any additional custom attributes
-            processCustomAttributes(span, eventData.attributes)
-
-            // Record processing duration
             span.setAttribute("processing.duration_ms", performance.now() - eventStartTime)
         })
 

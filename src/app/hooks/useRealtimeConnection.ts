@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react"
+import { useRef, useState, useEffect, useCallback } from "react"
 import { v4 as uuidv4 } from "uuid"
 import { SessionStatus, UseRealtimeConnectionProps } from "@/app/types"
 import { createRealtimeConnection } from "@/app/lib/realtimeConnection"
@@ -6,6 +6,7 @@ import { useTranscript } from "@/app/contexts/TranscriptContext"
 import { useEvent } from "@/app/contexts/EventContext"
 import { useHandleServerEvent } from "./useHandleServerEvent"
 import { recordServerEvent } from "../lib/client-telemetry"
+import { startTransaction, captureError } from "@/app/lib/apm-rum"
 
 export function useRealtimeConnection({
     selectedAgentName,
@@ -20,19 +21,15 @@ export function useRealtimeConnection({
     const [isPTTActive, setIsPTTActive] = useState<boolean>(false) // Default value
     const [isAudioPlaybackEnabled, setIsAudioPlaybackEnabled] = useState<boolean>(true) // Default value
 
-    // Load settings from localStorage only after component has mounted on client
+    // Combined localStorage effect for settings
     useEffect(() => {
         // This only runs on the client after mount
         const storedPTT = localStorage.getItem("pushToTalkUI")
-        if (storedPTT !== null) {
-            setIsPTTActive(storedPTT === "true")
-        }
-
         const storedAudio = localStorage.getItem("audioPlaybackEnabled")
-        if (storedAudio !== null) {
-            setIsAudioPlaybackEnabled(storedAudio === "true")
-        }
-    }, []) // Empty dependency array ensures this only runs once after mount
+        if (storedPTT !== null) setIsPTTActive(storedPTT === "true")
+        if (storedAudio !== null) setIsAudioPlaybackEnabled(storedAudio === "true")
+    }, [])
+
     const [userText, setUserText] = useState<string>("")
 
     // References
@@ -104,32 +101,117 @@ export function useRealtimeConnection({
         }
     }
 
-    // Function to fetch ephemeral key for WebRTC connection
-    const fetchEphemeralKey = async (): Promise<string | null> => {
-        logClientEvent({ url: "/session" }, "fetch_session_token_request")
-        const tokenResponse = await fetch("/api/session")
-        const data = await tokenResponse.json()
-        logServerEvent(data, "fetch_session_token_response")
+    // Memoize updateSession to avoid excessive invocations
+    const updateSession = useCallback(
+        (shouldTriggerResponse: boolean = false) => {
+            updateSessionCounterRef.current++
+            console.log(`[SESSION] updateSession with agent: ${selectedAgentName}, trigger: ${shouldTriggerResponse}`)
+            sendClientEvent({ type: "input_audio_buffer.clear" }, "clear audio buffer on session update")
 
-        if (!data.client_secret?.value) {
-            logClientEvent(data, "error.no_ephemeral_key")
-            console.error("No ephemeral key provided by the server")
-            window.elasticApm?.captureError(`No ephemeral key provided by the server`)
-            setSessionStatus("DISCONNECTED")
+            const currentAgent = selectedAgentConfigSet?.find((a) => a.name === selectedAgentName)
+            if (!currentAgent) {
+                console.error(`[SESSION] Cannot find agent config for ${selectedAgentName}`)
+                window.elasticApm?.captureError(`Cannot find agent config for ${selectedAgentName}`)
+                console.log(`[SESSION] Available agents: ${selectedAgentConfigSet?.map((a) => a.name).join(", ")}`)
+                return
+            }
+
+            console.log(`[SESSION] Found agent config for ${selectedAgentName}`)
+            console.log(`[SESSION] Agent has ${currentAgent.tools?.length || 0} tools`)
+
+            if (currentAgent.tools) {
+                const hasTransferTool = currentAgent.tools.some((tool) => tool.name === "transferAgents")
+                console.log(`[SESSION] Agent has transferAgents tool: ${hasTransferTool}`)
+
+                if (hasTransferTool) {
+                    const transferTool = currentAgent.tools.find((tool) => tool.name === "transferAgents")
+                    if (transferTool && transferTool.parameters?.properties?.destination_agent?.enum) {
+                        console.log(
+                            `[SESSION] Transfer targets: ${transferTool.parameters.properties.destination_agent.enum.join(", ")}`,
+                        )
+                    }
+                }
+            }
+
+            const turnDetection = isPTTActive
+                ? null
+                : {
+                      type: "server_vad",
+                      threshold: 0.7,
+                      prefix_padding_ms: 300,
+                      silence_duration_ms: 500,
+                      create_response: true,
+                  }
+
+            const instructions = currentAgent?.instructions || ""
+            const tools = currentAgent?.tools || []
+
+            const sessionUpdateEvent = {
+                type: "session.update",
+                session: {
+                    modalities: ["text", "audio"],
+                    instructions,
+                    voice: "echo",
+                    input_audio_format: "pcm16",
+                    output_audio_format: "pcm16",
+                    input_audio_transcription: { model: "whisper-1" },
+                    turn_detection: turnDetection,
+                    tools,
+                    temperature: 0.8,
+                },
+            }
+
+            console.log(`[SESSION] Sending session update for ${selectedAgentName}`)
+            const tx = startTransaction("session.update", "app", { agent: selectedAgentName })
+            sendClientEvent(sessionUpdateEvent)
+            tx.end()
+
+            if (shouldTriggerResponse) {
+                console.log(`[SESSION] Triggering initial response for ${selectedAgentName}`)
+                sendSimulatedUserMessage("hi")
+            } else {
+                console.log(`[SESSION] Session updated for ${selectedAgentName} without triggering response`)
+            }
+        },
+        [selectedAgentName, selectedAgentConfigSet, isPTTActive],
+    )
+
+    // Wrap fetchEphemeralKey with OTEL span instrumentation
+    const fetchEphemeralKey = async (): Promise<string | null> => {
+        const tx = startTransaction("session.fetchEphemeralKey", "app")
+        try {
+            logClientEvent({ url: "/session" }, "fetch_session_token_request")
+            const tokenResponse = await fetch("/api/session")
+            const data = await tokenResponse.json()
+            logServerEvent(data, "fetch_session_token_response")
+
+            if (!data.client_secret?.value) {
+                logClientEvent(data, "error.no_ephemeral_key")
+                console.error("No ephemeral key provided by the server")
+                window.elasticApm?.captureError(`No ephemeral key provided by the server`)
+                setSessionStatus("DISCONNECTED")
+                tx.end()
+                return null
+            }
+
+            tx.end()
+            return data.client_secret.value
+        } catch (err) {
+            captureError(err)
+            tx.end()
             return null
         }
-
-        return data.client_secret.value
     }
 
-    // Function to connect to the realtime service
+    // Instrument connectToRealtime with a span to time connection duration
     const connectToRealtime = async () => {
         if (sessionStatus !== "DISCONNECTED") return
         setSessionStatus("CONNECTING")
-
+        const tx = startTransaction("connectToRealtime", "app", { agent: selectedAgentName })
         try {
             const EPHEMERAL_KEY = await fetchEphemeralKey()
             if (!EPHEMERAL_KEY) {
+                tx.end()
                 return
             }
 
@@ -194,7 +276,10 @@ export function useRealtimeConnection({
             }
 
             setDataChannel(dc)
+            tx.end()
         } catch (err) {
+            captureError(err)
+            tx.end()
             console.error("Error connecting to realtime:", err)
 
             window.elasticApm?.captureError(`Error connecting to realtime: ${err}`)
@@ -204,8 +289,9 @@ export function useRealtimeConnection({
         }
     }
 
-    // Function to disconnect from the realtime service
+    // Instrument disconnectFromRealtime with a span for cleanup timing
     const disconnectFromRealtime = () => {
+        const tx = startTransaction("disconnectFromRealtime", "app")
         try {
             // Clean up event listeners from data channel
             if (dcRef.current && dcEventHandlersRef.current) {
@@ -243,7 +329,10 @@ export function useRealtimeConnection({
             dcRef.current = null
 
             logClientEvent({}, "disconnected")
+            tx.end()
         } catch (error) {
+            captureError(error)
+            tx.end()
             console.error("Error in disconnectFromRealtime:", error)
             window.elasticApm?.captureError(`Error in disconnectFromRealtime: ${error}`)
         }
@@ -302,76 +391,6 @@ export function useRealtimeConnection({
         sendClientEvent({ type: "response.create" }, "(trigger response after simulated user text message)")
     }
 
-    // Update session configuration
-    const updateSession = (shouldTriggerResponse: boolean = false) => {
-        updateSessionCounterRef.current++
-        console.log(`[SESSION] updateSession with agent: ${selectedAgentName}, trigger: ${shouldTriggerResponse}`)
-        sendClientEvent({ type: "input_audio_buffer.clear" }, "clear audio buffer on session update")
-
-        const currentAgent = selectedAgentConfigSet?.find((a) => a.name === selectedAgentName)
-        if (!currentAgent) {
-            console.error(`[SESSION] Cannot find agent config for ${selectedAgentName}`)
-            window.elasticApm?.captureError(`Cannot find agent config for ${selectedAgentName}`)
-            console.log(`[SESSION] Available agents: ${selectedAgentConfigSet?.map((a) => a.name).join(", ")}`)
-            return
-        }
-
-        console.log(`[SESSION] Found agent config for ${selectedAgentName}`)
-        console.log(`[SESSION] Agent has ${currentAgent.tools?.length || 0} tools`)
-
-        if (currentAgent.tools) {
-            const hasTransferTool = currentAgent.tools.some((tool) => tool.name === "transferAgents")
-            console.log(`[SESSION] Agent has transferAgents tool: ${hasTransferTool}`)
-
-            if (hasTransferTool) {
-                const transferTool = currentAgent.tools.find((tool) => tool.name === "transferAgents")
-                if (transferTool && transferTool.parameters?.properties?.destination_agent?.enum) {
-                    console.log(
-                        `[SESSION] Transfer targets: ${transferTool.parameters.properties.destination_agent.enum.join(", ")}`,
-                    )
-                }
-            }
-        }
-
-        const turnDetection = isPTTActive
-            ? null
-            : {
-                  type: "server_vad",
-                  threshold: 0.7,
-                  prefix_padding_ms: 300,
-                  silence_duration_ms: 500,
-                  create_response: true,
-              }
-
-        const instructions = currentAgent?.instructions || ""
-        const tools = currentAgent?.tools || []
-
-        const sessionUpdateEvent = {
-            type: "session.update",
-            session: {
-                modalities: ["text", "audio"],
-                instructions,
-                voice: "echo",
-                input_audio_format: "pcm16",
-                output_audio_format: "pcm16",
-                input_audio_transcription: { model: "whisper-1" },
-                turn_detection: turnDetection,
-                tools,
-                temperature: 0.8,
-            },
-        }
-
-        console.log(`[SESSION] Sending session update for ${selectedAgentName}`)
-        sendClientEvent(sessionUpdateEvent)
-
-        if (shouldTriggerResponse) {
-            console.log(`[SESSION] Triggering initial response for ${selectedAgentName}`)
-            sendSimulatedUserMessage("hi")
-        } else {
-            console.log(`[SESSION] Session updated for ${selectedAgentName} without triggering response`)
-        }
-    }
-
     // Cancel assistant speech
     const cancelAssistantSpeech = async () => {
         const mostRecentAssistantMessage = [...transcriptItems].reverse().find((item) => item.role === "assistant")
@@ -424,8 +443,6 @@ export function useRealtimeConnection({
         sendClientEvent({ type: "input_audio_buffer.commit" }, "commit PTT")
         sendClientEvent({ type: "response.create" }, "trigger response PTT")
     }
-
-    // We use a separate useEffect to initialize from localStorage after component mount
 
     // Save settings to localStorage (only in browser)
     useEffect(() => {

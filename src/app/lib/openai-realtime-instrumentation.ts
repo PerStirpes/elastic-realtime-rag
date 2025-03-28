@@ -9,8 +9,7 @@
  *
  *	http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
@@ -50,11 +49,12 @@ export function instrumentToolFunction<T extends (...args: any[]) => Promise<any
 // Dummy function for compatibility
 export function instrumentToolLogic<T extends Record<string, (...args: any[]) => Promise<any>>>(toolLogic: T): T {
     const instrumentedToolLogic: Partial<T> = {}
-
+    // Cache instrumented functions to avoid repeated instrumentation
     for (const [toolName, toolFn] of Object.entries(toolLogic)) {
-        ;(instrumentedToolLogic as any)[toolName] = instrumentToolFunction(toolName, toolFn)
+        if (!instrumentedToolLogic[toolName as keyof T]) {
+            instrumentedToolLogic[toolName as keyof T] = instrumentToolFunction(toolName, toolFn) as T[typeof toolName]
+        }
     }
-
     return instrumentedToolLogic as T
 }
 

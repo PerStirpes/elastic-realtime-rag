@@ -60,7 +60,7 @@ export async function recordTokenUsage(usageData: TokenUsage, model?: string) {
             })
         }
 
-        // End the transaction
+        // End the transaction as soon as work is done
         transaction.end()
     } catch (error) {
         console.error("Error recording token usage:", error)
